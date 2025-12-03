@@ -3,8 +3,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.states import MetaStates
 from bot.utils import extract_ipa_metadata
-from pathlib import Path
 from bot.repo_handler import build_index
+from pathlib import Path
 import json
 
 BASE_PATH = Path("repo")
@@ -74,7 +74,6 @@ async def meta_icon(callback: types.CallbackQuery, state: FSMContext):
     if callback.data.startswith("accept_"):
         meta["icon"] = callback.data.replace("accept_", "")
 
-    # Сохраняем JSON
     meta_path = PACKAGES / f"{ipa_file}.json"
     meta_path.write_text(json.dumps(meta, indent=4, ensure_ascii=False), encoding="utf-8")
 
