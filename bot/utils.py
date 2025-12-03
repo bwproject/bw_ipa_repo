@@ -7,10 +7,6 @@ IMAGES = Path("repo/images")
 IMAGES.mkdir(parents=True, exist_ok=True)
 
 def extract_ipa_metadata(ipa_path: Path):
-    """
-    Извлекает name, bundle_id, version и первую иконку из IPA.
-    Сохраняет иконку в repo/images/<bundle_id>.png
-    """
     with zipfile.ZipFile(ipa_path, 'r') as zip_ref:
         plist_file = None
         app_folder = None
