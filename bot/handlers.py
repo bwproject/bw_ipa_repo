@@ -1,4 +1,5 @@
 from aiogram import types, Dispatcher
+from aiogram.filters import Command
 from pathlib import Path
 import json
 import logging
@@ -14,7 +15,7 @@ IMAGES.mkdir(parents=True, exist_ok=True)
 # Хэндлер для файлов IPA
 # -----------------------------
 async def handle_document(message: types.Message):
-    if message.document and message.document.mime_type == "application/octet-stream" and message.document.file_name.endswith(".ipa"):
+    if message.document and message.document.file_name.endswith(".ipa"):
         file_path = PACKAGES / message.document.file_name
         await message.document.download(destination=file_path)
         logging.info(f"Сохранён файл IPA: {file_path}")
@@ -69,5 +70,7 @@ async def cmd_start(message: types.Message):
 def register_handlers(dp: Dispatcher):
     # Для документов используем фильтр через lambda
     dp.message.register(handle_document, lambda m: m.document is not None and m.document.file_name.endswith(".ipa"))
-    dp.message.register(cmd_repo, commands=["repo"])
-    dp.message.register(cmd_start, commands=["start"])
+
+    # Для команд используем фильтры Command
+    dp.message.register(cmd_repo, Command(commands=["repo"]))
+    dp.message.register(cmd_start, Command(commands=["start"]))
