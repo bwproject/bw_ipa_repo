@@ -2,6 +2,7 @@ from aiogram import types, Dispatcher
 from pathlib import Path
 import json
 import logging
+import os
 
 BASE_PATH = Path("repo")
 PACKAGES = BASE_PATH / "packages"
@@ -9,9 +10,9 @@ IMAGES = BASE_PATH / "images"
 PACKAGES.mkdir(parents=True, exist_ok=True)
 IMAGES.mkdir(parents=True, exist_ok=True)
 
-# =============================
-# Получение IPA
-# =============================
+# -----------------------------
+# Хэндлер для файлов IPA
+# -----------------------------
 async def handle_document(message: types.Message):
     if not message.document or not message.document.file_name.endswith(".ipa"):
         await message.answer("Пожалуйста, отправляйте только файлы .ipa")
@@ -22,9 +23,9 @@ async def handle_document(message: types.Message):
     logging.info(f"Сохранён файл IPA: {file_path}")
     await message.answer(f"Файл {message.document.file_name} сохранён ✅")
 
-# =============================
-# Команда /repo — обновление index.json
-# =============================
+# -----------------------------
+# Команда /repo — генерация index.json
+# -----------------------------
 async def cmd_repo(message: types.Message):
     index_file = BASE_PATH / "index.json"
     index_list = []
@@ -33,7 +34,6 @@ async def cmd_repo(message: types.Message):
         if ipa_file.suffix != ".ipa":
             continue
 
-        # Можно хранить metadata в json рядом с ipa
         meta_file = ipa_file.with_suffix(".json")
         if meta_file.exists():
             with open(meta_file, "r", encoding="utf-8") as f:
@@ -46,7 +46,6 @@ async def cmd_repo(message: types.Message):
                 "icon": "/skip"
             }
 
-        # Добавляем ссылку на сервер
         meta["url"] = f"{os.getenv('SERVER_URL', '')}/repo/packages/{ipa_file.name}"
         index_list.append(meta)
 
@@ -56,12 +55,19 @@ async def cmd_repo(message: types.Message):
     logging.info(f"Обновлён index.json с {len(index_list)} файлами")
     await message.answer(f"Репозиторий обновлён ✅\nФайлы: {len(index_list)}")
 
-# =============================
+# -----------------------------
+# Команда /start
+# -----------------------------
+async def cmd_start(message: types.Message):
+    await message.answer(
+        "Привет! Я бот репозитория IPA.\n"
+        "Отправляй файлы .ipa, а командой /repo обновляй репозиторий."
+    )
+
+# -----------------------------
 # Регистрация хэндлеров
-# =============================
+# -----------------------------
 def register_handlers(dp: Dispatcher):
     dp.message.register(handle_document, content_types=[types.ContentType.DOCUMENT])
     dp.message.register(cmd_repo, commands=["repo"])
-    dp.message.register(lambda m: m.answer(
-        "Привет! Я бот репозитория IPA.\n"
-        "Отправляй файлы .ipa, а командой /repo обновляй репозиторий."), commands=["start"])
+    dp.message.register(cmd_start, commands=["start"])
