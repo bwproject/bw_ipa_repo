@@ -5,7 +5,6 @@ from bot.states import MetaStates
 from bot.utils import extract_ipa_metadata
 from pathlib import Path
 import json
-import shutil
 
 BASE_PATH = Path("repo")
 PACKAGES = BASE_PATH / "packages"
@@ -22,7 +21,7 @@ def choice_keyboard(value):
 
 
 # -----------------------------
-# После загрузки IPA
+# Старт wizard после загрузки IPA
 # -----------------------------
 async def start_metadata(update: types.Message, state: FSMContext):
     ipa_file = update.message.document
@@ -33,9 +32,11 @@ async def start_metadata(update: types.Message, state: FSMContext):
     meta = extract_ipa_metadata(ipa_path)
     await state.update_data(ipa_file=ipa_file.file_name, meta=meta)
 
-    # Первый шаг — name
     value = meta.get("name") or "не найдено"
-    await update.message.answer(f"Введите name приложения или примите предложенное:", reply_markup=choice_keyboard(value))
+    await update.message.answer(
+        f"Введите name приложения или примите предложенное:",
+        reply_markup=choice_keyboard(value)
+    )
     await state.set_state(MetaStates.waiting_for_name)
 
 
@@ -48,11 +49,13 @@ async def meta_name(callback: types.CallbackQuery, state: FSMContext):
 
     if callback.data.startswith("accept_"):
         meta["name"] = callback.data.replace("accept_", "")
-    # skip оставляет как есть
 
     await state.update_data(meta=meta)
     value = meta.get("bundle_id") or "не найдено"
-    await callback.message.edit_text(f"Введите bundle_id приложения или примите предложенное:", reply_markup=choice_keyboard(value))
+    await callback.message.edit_text(
+        f"Введите bundle_id приложения или примите предложенное:",
+        reply_markup=choice_keyboard(value)
+    )
     await state.set_state(MetaStates.waiting_for_bundle)
 
 
@@ -65,11 +68,13 @@ async def meta_bundle(callback: types.CallbackQuery, state: FSMContext):
 
     if callback.data.startswith("accept_"):
         meta["bundle_id"] = callback.data.replace("accept_", "")
-    # skip оставляет как есть
 
     await state.update_data(meta=meta)
     value = meta.get("version") or "не найдено"
-    await callback.message.edit_text(f"Введите version приложения или примите предложенное:", reply_markup=choice_keyboard(value))
+    await callback.message.edit_text(
+        f"Введите version приложения или примите предложенное:",
+        reply_markup=choice_keyboard(value)
+    )
     await state.set_state(MetaStates.waiting_for_version)
 
 
@@ -85,7 +90,10 @@ async def meta_version(callback: types.CallbackQuery, state: FSMContext):
 
     await state.update_data(meta=meta)
     value = meta.get("icon") or "не найдено"
-    await callback.message.edit_text(f"Введите имя иконки приложения или примите предложенное:", reply_markup=choice_keyboard(value))
+    await callback.message.edit_text(
+        f"Введите имя иконки приложения или примите предложенное:",
+        reply_markup=choice_keyboard(value)
+    )
     await state.set_state(MetaStates.waiting_for_icon)
 
 
@@ -102,7 +110,20 @@ async def meta_icon(callback: types.CallbackQuery, state: FSMContext):
 
     # Сохраняем JSON
     meta_path = PACKAGES / f"{ipa_file}.json"
-    meta_path.write_text(json.dumps(meta, indent=4), encoding="utf-8")
+    meta_path.write_text(json.dumps(meta, indent=4, ensure_ascii=False), encoding="utf-8")
 
-    await callback.message.edit_text(f"🎉 Метаданные сохранены!\n\n{json.dumps(meta, indent=2, ensure_ascii=False)}")
+    await callback.message.edit_text(
+        f"🎉 Метаданные сохранены!\n\n{json.dumps(meta, indent=2, ensure_ascii=False)}"
+    )
     await state.clear()
+
+
+# -----------------------------
+# Регистрация хендлеров
+# -----------------------------
+def register_handlers(dp):
+    dp.message.register(start_metadata, F.document)
+    dp.callback_query.register(meta_name, MetaStates.waiting_for_name)
+    dp.callback_query.register(meta_bundle, MetaStates.waiting_for_bundle)
+    dp.callback_query.register(meta_version, MetaStates.waiting_for_version)
+    dp.callback_query.register(meta_icon, MetaStates.waiting_for_icon)
