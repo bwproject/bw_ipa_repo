@@ -4,6 +4,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.states import MetaStates
 from bot.utils import extract_ipa_metadata
 from pathlib import Path
+from bot.repo_handler import build_index
 import json
 
 BASE_PATH = Path("repo")
