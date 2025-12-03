@@ -1,33 +1,67 @@
 import asyncio
-import logging
+import os
+from dotenv import load_dotenv
+from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from pathlib import Path
+
+# -----------------------------
+# Telegram
+# -----------------------------
 from bot.bot import start_bot
-from server.server import start_server
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s] [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
+# -----------------------------
+# Load .env
+# -----------------------------
+load_dotenv()
 
-logger = logging.getLogger("ipa_repo")
+# -----------------------------
+# Папки репозитория
+# -----------------------------
+BASE_PATH = Path("repo")
+PACKAGES = BASE_PATH / "packages"
+IMAGES = BASE_PATH / "images"
+PACKAGES.mkdir(parents=True, exist_ok=True)
+IMAGES.mkdir(parents=True, exist_ok=True)
+
+# -----------------------------
+# FastAPI сервер
+# -----------------------------
+app = FastAPI()
 
 
+@app.get("/repo/packages/{file_name}")
+async def get_package(file_name: str):
+    path = PACKAGES / file_name
+    if path.exists():
+        return FileResponse(path)
+    return {"error": "File not found"}
+
+
+@app.get("/repo/images/{file_name}")
+async def get_image(file_name: str):
+    path = IMAGES / file_name
+    if path.exists():
+        return FileResponse(path)
+    return {"error": "File not found"}
+
+
+# -----------------------------
+# Параллельный запуск сервера и бота
+# -----------------------------
 async def main():
-    logger.info("🚀 Запуск системы...")
+    # Запуск FastAPI сервера
+    import uvicorn
+    server = uvicorn.Server(
+        uvicorn.Config(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+    )
 
-    server_task = asyncio.create_task(start_server())
-    bot_task = asyncio.create_task(start_bot())
-
-    await asyncio.gather(server_task, bot_task)
+    # Запуск сервера и бота параллельно
+    await asyncio.gather(
+        server.serve(),
+        start_bot()
+    )
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except RuntimeError:
-        # ← сюда попадём если уже есть активный event loop
-        logger.warning("⚠ Event loop уже запущен, переключаюсь на альтернативный запуск...")
-
-        loop = asyncio.get_event_loop()
-        loop.create_task(main())
-        loop.run_forever()
+    asyncio.run(main())
