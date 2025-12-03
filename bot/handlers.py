@@ -88,3 +88,4 @@ def register_handlers(dp):
     dp.callback_query.register(meta_bundle, MetaStates.waiting_for_bundle)
     dp.callback_query.register(meta_version, MetaStates.waiting_for_version)
     dp.callback_query.register(meta_icon, MetaStates.waiting_for_icon)
+    dp.message.register(build_index, lambda message: message.text == "/repo")
