@@ -7,7 +7,9 @@ load_dotenv()
 
 async def start_bot():
     app = Application.builder().token(os.getenv("BOT_TOKEN")).build()
+
+    # регистрация всех хендлеров
     register_handlers(app)
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling()
+
+    # правильный запуск polling в python-telegram-bot v20+
+    await app.run_polling()
