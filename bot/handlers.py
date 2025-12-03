@@ -14,14 +14,13 @@ IMAGES.mkdir(parents=True, exist_ok=True)
 # Хэндлер для файлов IPA
 # -----------------------------
 async def handle_document(message: types.Message):
-    if not message.document or not message.document.file_name.endswith(".ipa"):
+    if message.document and message.document.mime_type == "application/octet-stream" and message.document.file_name.endswith(".ipa"):
+        file_path = PACKAGES / message.document.file_name
+        await message.document.download(destination=file_path)
+        logging.info(f"Сохранён файл IPA: {file_path}")
+        await message.answer(f"Файл {message.document.file_name} сохранён ✅")
+    else:
         await message.answer("Пожалуйста, отправляйте только файлы .ipa")
-        return
-
-    file_path = PACKAGES / message.document.file_name
-    await message.document.download(destination=file_path)
-    logging.info(f"Сохранён файл IPA: {file_path}")
-    await message.answer(f"Файл {message.document.file_name} сохранён ✅")
 
 # -----------------------------
 # Команда /repo — генерация index.json
@@ -68,6 +67,7 @@ async def cmd_start(message: types.Message):
 # Регистрация хэндлеров
 # -----------------------------
 def register_handlers(dp: Dispatcher):
-    dp.message.register(handle_document, content_types=[types.ContentType.DOCUMENT])
+    # Для документов используем фильтр через lambda
+    dp.message.register(handle_document, lambda m: m.document is not None and m.document.file_name.endswith(".ipa"))
     dp.message.register(cmd_repo, commands=["repo"])
     dp.message.register(cmd_start, commands=["start"])
