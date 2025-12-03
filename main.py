@@ -30,6 +30,13 @@ async def get_image(file_name: str):
         return FileResponse(path)
     return {"error": "File not found"}
 
+@app.get("/repo/index.json")
+async def get_index():
+    path = BASE_PATH / "index.json"
+    if path.exists():
+        return FileResponse(path)
+    return {"error": "index.json не найден"}
+
 async def main():
     import uvicorn
     server = uvicorn.Server(
