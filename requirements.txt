@@ -1,5 +1,5 @@
 # Telegram bot
-aiogram==3.23.1       # последняя стабильная версия aiogram 3.x
+aiogram==3.22.0       # последняя стабильная версия aiogram 3.x
 aiohttp==3.8.5        # стабильная версия, работает с aiogram 3.23.1
 
 # Environment
