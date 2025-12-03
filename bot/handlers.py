@@ -1,11 +1,7 @@
-from aiogram import types, F
-from aiogram.fsm.context import FSMContext
-from aiogram.utils.keyboard import InlineKeyboardBuilder
-from bot.states import MetaStates
-from bot.utils import extract_ipa_metadata
-from bot.repo_handler import build_index
+from aiogram import types, Dispatcher
 from pathlib import Path
 import json
+import logging
 
 BASE_PATH = Path("repo")
 PACKAGES = BASE_PATH / "packages"
@@ -13,78 +9,59 @@ IMAGES = BASE_PATH / "images"
 PACKAGES.mkdir(parents=True, exist_ok=True)
 IMAGES.mkdir(parents=True, exist_ok=True)
 
+# =============================
+# Получение IPA
+# =============================
+async def handle_document(message: types.Message):
+    if not message.document or not message.document.file_name.endswith(".ipa"):
+        await message.answer("Пожалуйста, отправляйте только файлы .ipa")
+        return
 
-def choice_keyboard(value):
-    kb = InlineKeyboardBuilder()
-    kb.button(text=f"✅ Принять ({value})", callback_data=f"accept_{value}")
-    kb.button(text="⏭ Пропустить", callback_data="skip")
-    return kb.as_markup()
+    file_path = PACKAGES / message.document.file_name
+    await message.document.download(destination=file_path)
+    logging.info(f"Сохранён файл IPA: {file_path}")
+    await message.answer(f"Файл {message.document.file_name} сохранён ✅")
 
+# =============================
+# Команда /repo — обновление index.json
+# =============================
+async def cmd_repo(message: types.Message):
+    index_file = BASE_PATH / "index.json"
+    index_list = []
 
-async def start_metadata(update: types.Message, state: FSMContext):
-    ipa_file = update.message.document
-    ipa_path = PACKAGES / ipa_file.file_name
-    await ipa_file.get_file().download(ipa_path)
+    for ipa_file in PACKAGES.iterdir():
+        if ipa_file.suffix != ".ipa":
+            continue
 
-    meta = extract_ipa_metadata(ipa_path)
-    await state.update_data(ipa_file=ipa_file.file_name, meta=meta)
+        # Можно хранить metadata в json рядом с ipa
+        meta_file = ipa_file.with_suffix(".json")
+        if meta_file.exists():
+            with open(meta_file, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+        else:
+            meta = {
+                "name": ipa_file.stem,
+                "bundle_id": "/skip",
+                "version": "/skip",
+                "icon": "/skip"
+            }
 
-    value = meta.get("name") or "не найдено"
-    await update.message.answer(f"Введите name приложения или примите предложенное:", reply_markup=choice_keyboard(value))
-    await state.set_state(MetaStates.waiting_for_name)
+        # Добавляем ссылку на сервер
+        meta["url"] = f"{os.getenv('SERVER_URL', '')}/repo/packages/{ipa_file.name}"
+        index_list.append(meta)
 
+    with open(index_file, "w", encoding="utf-8") as f:
+        json.dump(index_list, f, indent=4, ensure_ascii=False)
 
-async def meta_name(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    meta = data.get("meta", {})
-    if callback.data.startswith("accept_"):
-        meta["name"] = callback.data.replace("accept_", "")
-    await state.update_data(meta=meta)
-    value = meta.get("bundle_id") or "не найдено"
-    await callback.message.edit_text(f"Введите bundle_id приложения или примите предложенное:", reply_markup=choice_keyboard(value))
-    await state.set_state(MetaStates.waiting_for_bundle)
+    logging.info(f"Обновлён index.json с {len(index_list)} файлами")
+    await message.answer(f"Репозиторий обновлён ✅\nФайлы: {len(index_list)}")
 
-
-async def meta_bundle(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    meta = data.get("meta", {})
-    if callback.data.startswith("accept_"):
-        meta["bundle_id"] = callback.data.replace("accept_", "")
-    await state.update_data(meta=meta)
-    value = meta.get("version") or "не найдено"
-    await callback.message.edit_text(f"Введите version приложения или примите предложенное:", reply_markup=choice_keyboard(value))
-    await state.set_state(MetaStates.waiting_for_version)
-
-
-async def meta_version(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    meta = data.get("meta", {})
-    if callback.data.startswith("accept_"):
-        meta["version"] = callback.data.replace("accept_", "")
-    await state.update_data(meta=meta)
-    value = meta.get("icon") or "не найдено"
-    await callback.message.edit_text(f"Введите имя иконки приложения или примите предложенное:", reply_markup=choice_keyboard(value))
-    await state.set_state(MetaStates.waiting_for_icon)
-
-
-async def meta_icon(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    meta = data.get("meta", {})
-    ipa_file = data.get("ipa_file")
-    if callback.data.startswith("accept_"):
-        meta["icon"] = callback.data.replace("accept_", "")
-
-    meta_path = PACKAGES / f"{ipa_file}.json"
-    meta_path.write_text(json.dumps(meta, indent=4, ensure_ascii=False), encoding="utf-8")
-
-    await callback.message.edit_text(f"🎉 Метаданные сохранены!\n\n{json.dumps(meta, indent=2, ensure_ascii=False)}")
-    await state.clear()
-
-
-def register_handlers(dp):
-    dp.message.register(start_metadata, F.document)
-    dp.callback_query.register(meta_name, MetaStates.waiting_for_name)
-    dp.callback_query.register(meta_bundle, MetaStates.waiting_for_bundle)
-    dp.callback_query.register(meta_version, MetaStates.waiting_for_version)
-    dp.callback_query.register(meta_icon, MetaStates.waiting_for_icon)
-    dp.message.register(build_index, lambda message: message.text == "/repo")
+# =============================
+# Регистрация хэндлеров
+# =============================
+def register_handlers(dp: Dispatcher):
+    dp.message.register(handle_document, content_types=[types.ContentType.DOCUMENT])
+    dp.message.register(cmd_repo, commands=["repo"])
+    dp.message.register(lambda m: m.answer(
+        "Привет! Я бот репозитория IPA.\n"
+        "Отправляй файлы .ipa, а командой /repo обновляй репозиторий."), commands=["start"])
