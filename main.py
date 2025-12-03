@@ -73,19 +73,17 @@ async def get_index():
 async def start_services():
     import uvicorn
 
-    # Создаем сервер uvicorn
     server = uvicorn.Server(
         uvicorn.Config(
-            app, 
-            host="0.0.0.0", 
-            port=int(os.getenv("PORT", 8000)), 
+            app,
+            host="0.0.0.0",
+            port=int(os.getenv("PORT", 8000)),
             log_level="info"
         )
     )
 
     logger.info("Запуск сервера и бота...")
     try:
-        # Параллельный запуск FastAPI сервера и Telegram бота
         await asyncio.gather(
             server.serve(),
             start_bot()
@@ -100,6 +98,5 @@ if __name__ == "__main__":
         loop = asyncio.get_event_loop()
         loop.run_until_complete(start_services())
     except RuntimeError as e:
-        # Если loop уже запущен (например, в Replit), используем asyncio.run
         logger.warning(f"{e}, используем asyncio.run() вместо run_until_complete")
         asyncio.run(start_services())
