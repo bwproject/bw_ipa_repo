@@ -4,14 +4,9 @@ import json
 
 BASE_PATH = Path("repo")
 PACKAGES = BASE_PATH / "packages"
-
 INDEX_FILE = BASE_PATH / "index.json"
 
-
 async def build_index(update: types.Message):
-    """
-    Генерирует index.json из всех JSON файлов в repo/packages
-    """
     all_packages = []
     for json_file in PACKAGES.glob("*.json"):
         try:
