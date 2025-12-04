@@ -10,6 +10,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi import UploadFile, File
+from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
@@ -68,6 +69,8 @@ async def upload_ipa(file: UploadFile = File(...)):
             f.write(chunk)
 
     return {"status": "ok", "saved": filename}
+    
+app.mount("/webapp", StaticFiles(directory="webapp"), name="webapp")
 
 # import bot start after app defined to avoid circular imports
 from bot.bot import start_bot  # local import
