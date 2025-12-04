@@ -1,7 +1,5 @@
 # bot/handlers.py
 
-# bot/handlers.py
-
 import json
 import logging
 from pathlib import Path
@@ -22,9 +20,10 @@ IMAGES = BASE / "images"
 PACKAGES.mkdir(parents=True, exist_ok=True)
 IMAGES.mkdir(parents=True, exist_ok=True)
 
-# -----------------------------
-# Скачивание через Telegram API
-# -----------------------------
+
+# ==============================
+#  Скачивание через Telegram API
+# ==============================
 async def _download_via_telegram_url(bot, file_id: str, dest: Path):
     file_info = await bot.get_file(file_id)
     file_url = f"https://api.telegram.org/file/bot{bot.token}/{file_info.file_path}"
@@ -39,9 +38,35 @@ async def _download_via_telegram_url(bot, file_id: str, dest: Path):
                 async for chunk in resp.content.iter_chunked(64 * 1024):
                     fd.write(chunk)
 
-# -----------------------------
-# Обработка документа (.ipa)
-# -----------------------------
+
+# ==============================
+#  Обработка документа (.ipa)
+# ==============================
+async def fix_icon_url(meta: dict, ipa_name: str, server_url: str):
+    """
+    Приводит iconURL к формату:
+    https://server/repo/images/icon.png
+    """
+
+    icon_url = meta.get("iconURL", "").strip()
+
+    # Если указали полный URL — не трогаем
+    if icon_url.startswith("http://") or icon_url.startswith("https://"):
+        return icon_url
+
+    # Если иконка внутри .ipa не извлеклась → пробуем repo/images/<ipa>.png
+    guessed_png = IMAGES / (Path(ipa_name).stem + ".png")
+    if icon_url == "" and guessed_png.exists():
+        return f"{server_url}/repo/images/{guessed_png.name}"
+
+    # Если iconURL начинается с /repo/images/...
+    if icon_url.startswith("/"):
+        return f"{server_url}{icon_url}"
+
+    # Если пусто и PNG нет
+    return ""
+
+
 async def handle_document(message: types.Message, bot):
     doc = message.document
     if not doc or not doc.file_name.lower().endswith(".ipa"):
@@ -51,6 +76,9 @@ async def handle_document(message: types.Message, bot):
     target = PACKAGES / doc.file_name
     await message.answer("🔄 Пытаюсь скачать файл через Telegram…")
 
+    import os
+    server_url = os.getenv("SERVER_URL", "").rstrip("/")
+
     try:
         # --- Скачиваем через Telegram API ---
         await _download_via_telegram_url(bot, doc.file_id, target)
@@ -58,20 +86,25 @@ async def handle_document(message: types.Message, bot):
 
         # --- Генерация .json для каждого IPA ---
         meta_file = target.with_suffix(".json")
+
         if not meta_file.exists():
             meta = extract_ipa_metadata(target)
+
+            # Правильный iconURL
+            fixed_icon = await fix_icon_url(meta, target.name, server_url)
+
             meta_to_save = {
                 "name": meta.get("name") or target.stem,
                 "bundleIdentifier": meta.get("bundleIdentifier") or f"com.projectbw.{target.stem.lower()}",
                 "developerName": meta.get("developerName", "Unknown"),
-                "iconURL": meta.get("iconURL") or "",
+                "iconURL": fixed_icon,
                 "localizedDescription": meta.get("localizedDescription") or "",
                 "subtitle": meta.get("subtitle") or "",
                 "tintColor": meta.get("tintColor") or "3c94fc",
                 "category": meta.get("category") or "utilities",
                 "versions": [
                     {
-                        "downloadURL": f"{target.name}",  # actual URL will be patched in /repo
+                        "downloadURL": f"{server_url}/repo/packages/{target.name}",
                         "size": get_file_size(target),
                         "version": meta.get("version") or "1.0",
                         "buildVersion": "1",
@@ -81,13 +114,13 @@ async def handle_document(message: types.Message, bot):
                     }
                 ]
             }
+
             meta_file.write_text(json.dumps(meta_to_save, indent=4, ensure_ascii=False), encoding="utf-8")
             logger.info(f"Wrote meta file: {meta_file}")
 
         await message.answer(f"Файл {doc.file_name} сохранён через Telegram API ✅")
 
     except TelegramBadRequest as e:
-        # --- Файл слишком большой ---
         if "file is too big" in str(e).lower():
             import os
             server = os.getenv("SERVER_URL", "").rstrip("/")
@@ -106,19 +139,20 @@ async def handle_document(message: types.Message, bot):
         else:
             logger.exception("TelegramBadRequest during download")
             await message.answer("Ошибка Telegram API ❌")
+
     except Exception as e:
         logger.exception("Failed to download file")
         await message.answer("Ошибка при скачивании файла ❌")
 
-# -----------------------------
-# Команда /repo — генерация index.json
-# -----------------------------
+
+# ==============================
+#  Команда /repo — генерация index.json
+# ==============================
 async def cmd_repo(message: types.Message):
     import os
     index_file = BASE / "index.json"
     server_url = os.getenv("SERVER_URL", "").rstrip("/")
 
-    # Статические данные репо
     repo_data = {
         "name": "ProjectBW Repository",
         "identifier": "projectbw.ksign-repo",
@@ -132,6 +166,7 @@ async def cmd_repo(message: types.Message):
 
     for ipa in PACKAGES.glob("*.ipa"):
         meta_file = ipa.with_suffix(".json")
+
         if meta_file.exists():
             try:
                 app_meta = json.loads(meta_file.read_text(encoding="utf-8"))
@@ -139,20 +174,19 @@ async def cmd_repo(message: types.Message):
                 logger.warning(f"Bad meta {meta_file}: {e}")
                 continue
         else:
-            # Генерируем json на лету, если нет
             meta = extract_ipa_metadata(ipa)
             app_meta = {
                 "name": meta.get("name") or ipa.stem,
                 "bundleIdentifier": meta.get("bundleIdentifier") or f"com.projectbw.{ipa.stem.lower()}",
                 "developerName": meta.get("developerName") or "Unknown",
-                "iconURL": meta.get("iconURL") or "",
+                "iconURL": "",
                 "localizedDescription": meta.get("localizedDescription") or "",
                 "subtitle": meta.get("subtitle") or "",
                 "tintColor": meta.get("tintColor") or "3c94fc",
                 "category": meta.get("category") or "utilities",
                 "versions": [
                     {
-                        "downloadURL": f"{server_url}/repo/packages/{ipa.name}" if server_url else f"/repo/packages/{ipa.name}",
+                        "downloadURL": f"{server_url}/repo/packages/{ipa.name}",
                         "size": get_file_size(ipa),
                         "version": meta.get("version") or "1.0",
                         "buildVersion": "1",
@@ -162,27 +196,33 @@ async def cmd_repo(message: types.Message):
                     }
                 ]
             }
-            # Сохраняем созданный .json
-            meta_file.write_text(json.dumps(app_meta, indent=4, ensure_ascii=False), encoding="utf-8")
+
+        # --- Правим iconURL ---
+        app_meta["iconURL"] = await fix_icon_url(app_meta, ipa.name, server_url)
 
         repo_data["apps"].append(app_meta)
 
     # Сохраняем index.json
     index_file.write_text(json.dumps(repo_data, indent=4, ensure_ascii=False), encoding="utf-8")
-    logger.info(f"index.json generated ({len(repo_data['apps'])} entries)")
-    await message.answer(f"index.json обновлён ({len(repo_data['apps'])} приложений)\n{server_url}/repo/index.json")
 
-# -----------------------------
-# Команды /start и /upload
-# -----------------------------
+    await message.answer(
+        f"index.json обновлён ({len(repo_data['apps'])} приложений)\n"
+        f"{server_url}/repo/index.json"
+    )
+
+
+# ==============================
+#  /start & /upload
+# ==============================
 async def cmd_start(message: types.Message):
     await message.answer(
         "👋 bw_ipa_repo bot\n\n"
         "• Отправь мне файл .ipa — я сохраню его в репозиторий.\n"
-        "• (опционально) добавь рядом файл .json с метаданными.\n"
-        "• Командой /repo собери новый index.json\n"
-        "• /upload — открыть WebApp для загрузки больших файлов"
+        "• (опционально) добавь рядом .json\n"
+        "• /repo — собрать index.json\n"
+        "• /upload — открыть WebApp"
     )
+
 
 async def cmd_upload(message: types.Message):
     import os
@@ -194,11 +234,12 @@ async def cmd_upload(message: types.Message):
             web_app=WebAppInfo(url=upload_url)
         )]]
     )
-    await message.answer("Открыть WebApp для загрузки IPA:", reply_markup=kb)
+    await message.answer("Открыть WebApp:", reply_markup=kb)
 
-# -----------------------------
-# Регистрация хэндлеров
-# -----------------------------
+
+# ==============================
+#  Регистрация хэндлеров
+# ==============================
 def register_handlers(dp: Dispatcher):
     dp.message.register(
         handle_document,
