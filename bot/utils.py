@@ -31,10 +31,13 @@ def extract_ipa_metadata(ipa_path: Path) -> dict:
                 with zf.open(info_plist_path) as plist_file:
                     plist_data = plistlib.load(plist_file)
                     meta["name"] = plist_data.get("CFBundleDisplayName") or plist_data.get("CFBundleName") or ipa_path.stem
-                    meta["bundleIdentifier"] = plist_data.get("CFBundleIdentifier", ipa_path.stem)
+                    meta["bundleIdentifier"] = plist_data.get("CFBundleIdentifier", "")
                     meta["version"] = plist_data.get("CFBundleShortVersionString", "1.0")
                     meta["min_ios"] = plist_data.get("MinimumOSVersion", "16.0")
                     meta["localizedDescription"] = plist_data.get("CFBundleGetInfoString", "")
+                    meta["subtitle"] = ""
+                    meta["tintColor"] = "3c94fc"
+                    meta["category"] = "utilities"
 
             # Извлекаем иконку
             if icon_path:
@@ -44,29 +47,21 @@ def extract_ipa_metadata(ipa_path: Path) -> dict:
                     shutil.copyfileobj(icon_file, f_out)
                 meta["iconURL"] = f"/repo/images/{icon_filename}"
             else:
-                meta["iconURL"] = None
-
-            # Размер файла
-            meta["size"] = get_file_size(ipa_path)
+                meta["iconURL"] = ""
 
     except Exception as e:
         logger.exception(f"Failed to extract metadata from {ipa_path}: {e}")
         meta.setdefault("name", ipa_path.stem)
-        meta.setdefault("bundleIdentifier", ipa_path.stem)
+        meta.setdefault("bundleIdentifier", "")
         meta.setdefault("version", "1.0")
-        meta.setdefault("iconURL", None)
+        meta.setdefault("iconURL", "")
         meta.setdefault("min_ios", "16.0")
         meta.setdefault("localizedDescription", "")
-        meta["size"] = get_file_size(ipa_path)
+        meta.setdefault("subtitle", "")
+        meta.setdefault("tintColor", "3c94fc")
+        meta.setdefault("category", "utilities")
 
     return meta
 
 def get_file_size(path: Path) -> int:
-    """
-    Возвращает размер файла в байтах.
-    """
-    try:
-        return path.stat().st_size
-    except Exception as e:
-        logger.warning(f"Failed to get file size for {path}: {e}")
-        return 0
+    return path.stat().st_size if path.exists() else 0
