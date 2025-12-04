@@ -130,6 +130,15 @@ async def cmd_repo(message: types.Message):
             except Exception as e:
                 logger.warning(f"Bad meta {meta_file}: {e}")
                 meta = {}
+        else:
+            # если нет .json — извлекаем из IPA
+            meta = extract_ipa_metadata(ipa)
+            meta_file.write_text(
+                json.dumps(meta, indent=4, ensure_ascii=False),
+                encoding="utf-8"
+            )
+            logger.info(f"Wrote meta for {ipa.name}: {meta_file}")
+
         meta.setdefault("name", ipa.stem)
         meta.setdefault("bundle_id", "/skip")
         meta.setdefault("version", "/skip")
