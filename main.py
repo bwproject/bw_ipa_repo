@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
+from fastapi import UploadFile, File
 
 load_dotenv()
 
@@ -56,6 +57,17 @@ async def get_image(file_name: str):
         return FileResponse(p)
     logger.warning(f"Image not found: {file_name}")
     return {"error": "file not found"}, 404
+    
+@app.post("/upload")
+async def upload_ipa(file: UploadFile = File(...)):
+    filename = file.filename
+    target = PACKAGES / filename
+
+    with open(target, "wb") as f:
+        while chunk := await file.read(1024 * 1024):
+            f.write(chunk)
+
+    return {"status": "ok", "saved": filename}
 
 # import bot start after app defined to avoid circular imports
 from bot.bot import start_bot  # local import
