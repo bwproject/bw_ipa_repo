@@ -5,10 +5,11 @@
 import asyncio
 import os
 import logging
+import json
 from dotenv import load_dotenv
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
@@ -24,6 +25,8 @@ logger = logging.getLogger("bw_ipa_repo")
 BASE = Path("repo")
 PACKAGES = BASE / "packages"
 IMAGES = BASE / "images"
+INDEX_HTML = Path("index/template.html")  # Шаблон HTML для корня
+
 BASE.mkdir(parents=True, exist_ok=True)
 PACKAGES.mkdir(parents=True, exist_ok=True)
 IMAGES.mkdir(parents=True, exist_ok=True)
@@ -31,6 +34,52 @@ IMAGES.mkdir(parents=True, exist_ok=True)
 # FastAPI app
 app = FastAPI(title="bw_ipa_repo")
 
+# ======== Маршрут для корня / ========
+@app.get("/", response_class=HTMLResponse)
+async def root_index():
+    index_file = BASE / "index.json"
+    if not index_file.exists():
+        return HTMLResponse("<h1>index.json not found</h1>", status_code=404)
+
+    with open(index_file, "r", encoding="utf-8") as f:
+        try:
+            apps = json.load(f)
+        except json.JSONDecodeError:
+            return HTMLResponse("<h1>Invalid index.json</h1>", status_code=500)
+
+    if not INDEX_HTML.exists():
+        return HTMLResponse("<h1>HTML template not found</h1>", status_code=500)
+
+    with open(INDEX_HTML, "r", encoding="utf-8") as f:
+        html_template = f.read()
+
+    apps_html = ""
+    for app_item in apps:
+        name = app_item.get("name", "Unnamed")
+        version = app_item.get("version", "N/A")
+        bundle = app_item.get("bundleIdentifier", "")
+        file_name = app_item.get("file_name", "")
+        icon_name = app_item.get("icon", "")
+
+        ipa_link = f"/repo/packages/{file_name}" if file_name else "#"
+        img_link = f"/repo/images/{icon_name}" if icon_name else "https://via.placeholder.com/128"
+
+        apps_html += f'''
+        <div class="app-card">
+            <img src="{img_link}" alt="{name}">
+            <div class="app-info">
+                <div class="app-name">{name}</div>
+                <div class="app-bundle">{bundle}</div>
+                <div class="app-version">{version}</div>
+                <a href="{ipa_link}" class="download-btn">Download</a>
+            </div>
+        </div>
+        '''
+
+    html_content = html_template.replace("{{APPS_LIST}}", apps_html)
+    return HTMLResponse(html_content)
+
+# ======== Существующие маршруты /repo ========
 @app.get("/repo/index.json")
 async def get_index():
     p = BASE / "index.json"
