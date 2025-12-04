@@ -66,23 +66,61 @@
             background: #0056b3;
         }
 
-        /* Адаптивность */
         @media (max-width: 600px) {
-            .app-card {
-                width: 45%;
-            }
+            .app-card { width: 45%; }
         }
         @media (max-width: 400px) {
-            .app-card {
-                width: 100%;
-            }
+            .app-card { width: 100%; }
         }
     </style>
 </head>
 <body>
     <h1>Applications</h1>
-    <div class="apps-container">
-        {{APPS_LIST}}
+    <div class="apps-container" id="apps-container">
+        <!-- Сюда подгрузится список приложений -->
     </div>
+
+    <script>
+        async function loadApps() {
+            try {
+                const response = await fetch('https://ipa.projectbw.ru/repo/index.json');
+                if (!response.ok) throw new Error('Failed to fetch index.json');
+                const apps = await response.json();
+
+                const container = document.getElementById('apps-container');
+                container.innerHTML = '';
+
+                apps.forEach(app => {
+                    const name = app.name || 'Unnamed';
+                    const version = app.version || 'N/A';
+                    const bundle = app.bundleIdentifier || '';
+                    const file_name = app.file_name || '';
+                    const icon = app.icon || 'https://via.placeholder.com/128';
+
+                    const ipa_link = file_name ? `/repo/packages/${file_name}` : '#';
+                    const img_link = icon.startsWith('http') ? icon : `/repo/images/${icon}`;
+
+                    const card = document.createElement('div');
+                    card.className = 'app-card';
+                    card.innerHTML = `
+                        <img src="${img_link}" alt="${name}">
+                        <div class="app-info">
+                            <div class="app-name">${name}</div>
+                            <div class="app-bundle">${bundle}</div>
+                            <div class="app-version">${version}</div>
+                            <a href="${ipa_link}" class="download-btn">Download</a>
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
+            } catch (err) {
+                const container = document.getElementById('apps-container');
+                container.innerHTML = `<p style="color:red;">Error loading apps: ${err.message}</p>`;
+                console.error(err);
+            }
+        }
+
+        loadApps();
+    </script>
 </body>
 </html>
