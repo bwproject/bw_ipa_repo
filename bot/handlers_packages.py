@@ -9,8 +9,6 @@ from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
-from bot.utils import extract_ipa_metadata, get_file_size
-
 logger = logging.getLogger("bot.packages")
 
 BASE = Path("repo")
@@ -27,45 +25,21 @@ class EditStates(StatesGroup):
 
 
 # ===============================
-# /packages_update — пересоздание всех JSON
+# /packages_update — пересоздание JSON
 # ===============================
 async def cmd_packages_update(message: types.Message):
     import os
     server_url = os.getenv("SERVER_URL", "").rstrip("/")
 
     count = 0
-
     for ipa in PACKAGES.glob("*.ipa"):
-        meta = extract_ipa_metadata(ipa)
-        fixed_icon = f"{server_url}/repo/images/{Path(ipa.name).stem}.png"  # простой вариант
-
         meta_file = ipa.with_suffix(".json")
         if not meta_file.exists():
-            new_json = {
-                "name": meta.get("name") or ipa.stem,
-                "bundleIdentifier": meta.get("bundleIdentifier") or f"com.projectbw.{ipa.stem.lower()}",
-                "developerName": meta.get("developerName") or "Unknown",
-                "iconURL": fixed_icon,
-                "localizedDescription": meta.get("localizedDescription") or "",
-                "subtitle": meta.get("subtitle") or "",
-                "tintColor": meta.get("tintColor") or "3c94fc",
-                "category": meta.get("category") or "utilities",
-                "versions": [
-                    {
-                        "downloadURL": f"{server_url}/repo/packages/{ipa.name}",
-                        "size": get_file_size(ipa),
-                        "version": meta.get("version") or "1.0",
-                        "buildVersion": "1",
-                        "date": "",
-                        "localizedDescription": meta.get("localizedDescription") or "",
-                        "minOSVersion": meta.get("min_ios") or "16.0"
-                    }
-                ]
-            }
-            meta_file.write_text(json.dumps(new_json, indent=4, ensure_ascii=False), encoding="utf-8")
-            count += 1
+            # Пропускаем, создаётся при загрузке
+            continue
+        count += 1
 
-    await message.answer(f"♻ Обновлено JSON файлов: <b>{count}</b>", parse_mode="html")
+    await message.answer(f"♻ JSON файлов: <b>{count}</b> проверено", parse_mode="html")
 
 
 # ===============================
@@ -85,7 +59,7 @@ async def cmd_packages_list(message: types.Message):
 
 
 # ===============================
-# /packages_edit NAME — открываем редактирование
+# /packages_edit NAME — открыть редактирование
 # ===============================
 async def cmd_packages_edit_name(message: types.Message, state: FSMContext):
     parts = message.text.split(maxsplit=1)
@@ -98,26 +72,23 @@ async def cmd_packages_edit_name(message: types.Message, state: FSMContext):
         return await message.answer("❌ Файл не найден")
 
     data = json.loads(target.read_text(encoding="utf-8"))
-
     await state.update_data(file_path=str(target), json_data=data)
     await state.set_state(EditStates.editing_name)
 
     await message.answer(
-        f"📝 Редактирование: <b>{name}.json</b>\n\n"
-        "Введите новое значение для <b>name</b>:", parse_mode="html"
+        f"📝 Редактирование: <b>{name}.json</b>\n\nВведите новое значение для <b>name</b>:",
+        parse_mode="html"
     )
 
 
 # ===============================
-# Обработка сообщений редактирования
+# Редактирование сообщений
 # ===============================
 async def process_edit_line(message: types.Message, state: FSMContext):
     data = await state.get_data()
     json_data = data["json_data"]
     file_path = Path(data["file_path"])
-
     current_state = await state.get_state()
-
     text = message.text.strip()
     if not text:
         return await message.answer("❌ Значение не может быть пустым")
@@ -136,11 +107,10 @@ async def process_edit_line(message: types.Message, state: FSMContext):
         await state.clear()
         prompt = "✔ Редактирование завершено!"
     else:
-        return  # не должно случиться
+        return
 
     file_path.write_text(json.dumps(json_data, indent=4, ensure_ascii=False), encoding="utf-8")
     await state.update_data(json_data=json_data)
-
     await message.answer(prompt, parse_mode="html")
 
 
