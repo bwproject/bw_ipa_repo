@@ -4,19 +4,43 @@
     <meta charset="utf-8" />
     <title>Upload IPA</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            background: #111;
+            color: white;
+            font-family: sans-serif;
+            padding: 20px;
+        }
+        #drop-zone {
+            border: 2px dashed #888;
+            border-radius: 10px;
+            padding: 50px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+        }
+        #drop-zone.hover {
+            border-color: #0f0;
+            background: #222;
+        }
+        #upload {
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+        #status {
+            margin-top: 20px;
+            word-break: break-all;
+        }
+    </style>
 </head>
-<body style="background:#111;color:white;padding:20px;font-family:sans-serif;">
+<body>
+    <h2>Upload IPA File</h2>
 
-<h2>Upload IPA File</h2>
+    <div id="drop-zone">Drag & Drop .ipa file here or click to select</div>
+    <input id="file" type="file" accept=".ipa" style="display:none">
+    <button id="upload">Upload</button>
+    <div id="status"></div>
 
-<input id="file" type="file" accept=".ipa" style="margin-bottom:20px">
-
-<button id="upload" style="padding:10px 20px;font-size:16px;">
-    Upload
-</button>
-
-<div id="status" style="margin-top:20px;"></div>
-
-<script src="upload.js"></script>
+    <script src="upload.js"></script>
 </body>
 </html>
