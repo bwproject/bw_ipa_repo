@@ -1,4 +1,4 @@
-# handlers.py
+# bot/handlers.py
 
 import json
 import logging
