@@ -1,19 +1,45 @@
-let tg = window.Telegram.WebApp;
+const tg = window.Telegram.WebApp;
+const fileInput = document.getElementById("file");
+const uploadBtn = document.getElementById("upload");
+const statusDiv = document.getElementById("status");
 
-document.getElementById("upload").onclick = async () => {
-    const file = document.getElementById("file").files[0];
-    if (!file) return;
+// Подключаем MainButton для удобного интерфейса
+tg.MainButton.setText("Upload");
+tg.MainButton.show();
 
-    const form = new FormData();
-    form.append("file", file);
+uploadBtn.addEventListener("click", async () => {
+    const file = fileInput.files[0];
+    if (!file) {
+        statusDiv.innerText = "❌ Please select a .ipa file";
+        return;
+    }
 
-    document.getElementById("status").innerText = "Uploading...";
+    const formData = new FormData();
+    formData.append("file", file);
 
-    const res = await fetch("/upload", {
-        method: "POST",
-        body: form
-    });
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/upload", true);
 
-    const data = await res.json();
-    document.getElementById("status").innerText = JSON.stringify(data);
-};
+    xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+            const percent = Math.round((event.loaded / event.total) * 100);
+            statusDiv.innerText = `🔄 Uploading: ${percent}%`;
+        }
+    };
+
+    xhr.onload = () => {
+        if (xhr.status === 200) {
+            const resp = JSON.parse(xhr.responseText);
+            statusDiv.innerText = `✅ Uploaded: ${resp.saved}`;
+            tg.MainButton.setText("Done!");
+        } else {
+            statusDiv.innerText = `❌ Upload error: ${xhr.status}`;
+        }
+    };
+
+    xhr.onerror = () => {
+        statusDiv.innerText = "❌ Network error during upload";
+    };
+
+    xhr.send(formData);
+});
