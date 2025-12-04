@@ -23,7 +23,7 @@ IMAGES.mkdir(parents=True, exist_ok=True)
 
 
 # ==============================
-#  Скачивание через Telegram API
+# Скачивание через Telegram API
 # ==============================
 async def _download_via_telegram_url(bot, file_id: str, dest: Path):
     file_info = await bot.get_file(file_id)
@@ -41,21 +41,18 @@ async def _download_via_telegram_url(bot, file_id: str, dest: Path):
 
 
 # ==============================
-#  Правка iconURL
+# Правка iconURL
 # ==============================
 async def fix_icon_url(meta: dict, ipa_name: str, server_url: str):
     icon_url = meta.get("iconURL", "").strip()
 
-    # Полный URL оставляем
     if icon_url.startswith("http://") or icon_url.startswith("https://"):
         return icon_url
 
-    # Если пусто — возможно PNG уже извлечён
     guessed_png = IMAGES / (Path(ipa_name).stem + ".png")
     if icon_url == "" and guessed_png.exists():
         return f"{server_url}/repo/images/{guessed_png.name}"
 
-    # Если начинается с /repo/images/... → добавляем домен
     if icon_url.startswith("/"):
         return f"{server_url}{icon_url}"
 
@@ -63,7 +60,7 @@ async def fix_icon_url(meta: dict, ipa_name: str, server_url: str):
 
 
 # ==============================
-#  Обработка документа (.ipa)
+# Обработка документа (.ipa)
 # ==============================
 async def handle_document(message: types.Message, bot):
     doc = message.document
@@ -78,13 +75,11 @@ async def handle_document(message: types.Message, bot):
     server_url = os.getenv("SERVER_URL", "").rstrip("/")
 
     try:
-        # --- Скачиваем через Telegram API ---
         await _download_via_telegram_url(bot, doc.file_id, target)
         logger.info(f"Saved IPA: {target}")
 
-        # --- Создаём JSON ---
+        # Создание JSON, если его нет
         meta_file = target.with_suffix(".json")
-
         if not meta_file.exists():
             meta = extract_ipa_metadata(target)
             fixed_icon = await fix_icon_url(meta, target.name, server_url)
@@ -112,7 +107,6 @@ async def handle_document(message: types.Message, bot):
             }
 
             meta_file.write_text(json.dumps(meta_to_save, indent=4, ensure_ascii=False), encoding="utf-8")
-            logger.info(f"Wrote meta file: {meta_file}")
 
         await message.answer(f"Файл {doc.file_name} сохранён через Telegram API ✅")
 
@@ -142,12 +136,12 @@ async def handle_document(message: types.Message, bot):
 
 
 # ==============================
-#  /repo — генерация index.json
+# /repo — генерация index.json
 # ==============================
 async def cmd_repo(message: types.Message):
     import os
-    index_file = BASE / "index.json"
     server_url = os.getenv("SERVER_URL", "").rstrip("/")
+    index_file = BASE / "index.json"
 
     repo_data = {
         "name": "ProjectBW Repository",
@@ -193,6 +187,12 @@ async def cmd_repo(message: types.Message):
                 ]
             }
 
+        # Обновляем name, bundleIdentifier и версию из JSON (если редактировалось)
+        app_meta["name"] = app_meta.get("name", ipa.stem)
+        app_meta["bundleIdentifier"] = app_meta.get("bundleIdentifier", f"com.projectbw.{ipa.stem.lower()}")
+        if "versions" in app_meta and len(app_meta["versions"]) > 0:
+            app_meta["versions"][0]["version"] = app_meta["versions"][0].get("version", "1.0")
+
         app_meta["iconURL"] = await fix_icon_url(app_meta, ipa.name, server_url)
         repo_data["apps"].append(app_meta)
 
@@ -205,7 +205,7 @@ async def cmd_repo(message: types.Message):
 
 
 # ==============================
-#  /start
+# /start
 # ==============================
 async def cmd_start(message: types.Message):
     await message.answer(
@@ -218,7 +218,7 @@ async def cmd_start(message: types.Message):
 
 
 # ==============================
-#  /upload
+# /upload
 # ==============================
 async def cmd_upload(message: types.Message):
     import os
@@ -234,7 +234,7 @@ async def cmd_upload(message: types.Message):
 
 
 # ==============================
-#  Регистрация всех хэндлеров
+# Регистрация всех хэндлеров
 # ==============================
 def register_handlers(dp: Dispatcher):
     # IPA загрузка
