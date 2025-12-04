@@ -1,196 +1,96 @@
 # handlers.py
 
-import json
-import logging
+# main.py (https://github.com/bwproject/bw_ipa_repo/blob/main/main.py)
+
+#!/usr/bin/env python3
+
+import asyncio
 import os
+import logging
+from dotenv import load_dotenv
 from pathlib import Path
+from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi import UploadFile, File
+from fastapi.staticfiles import StaticFiles
 
-import aiohttp
-from aiogram import types, Dispatcher
-from aiogram.filters import Command
-from aiogram.exceptions import TelegramBadRequest
+load_dotenv()
 
-from bot.utils import extract_ipa_metadata
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+)
+logger = logging.getLogger("bw_ipa_repo")
 
-logger = logging.getLogger("bot.handlers")
-
-# Папки
+# Paths
 BASE = Path("repo")
 PACKAGES = BASE / "packages"
 IMAGES = BASE / "images"
+BASE.mkdir(parents=True, exist_ok=True)
 PACKAGES.mkdir(parents=True, exist_ok=True)
 IMAGES.mkdir(parents=True, exist_ok=True)
 
+# FastAPI app
+app = FastAPI(title="bw_ipa_repo")
 
-# -----------------------------
-# Функция скачивания через Telegram URL
-# -----------------------------
-async def _download_via_telegram_url(bot, file_id: str, dest: Path):
-    file_info = await bot.get_file(file_id)
-    file_url = f"https://api.telegram.org/file/bot{bot.token}/{file_info.file_path}"
+@app.get("/repo/index.json")
+async def get_index():
+    p = BASE / "index.json"
+    if p.exists():
+        logger.info("Serving index.json")
+        return FileResponse(p)
+    logger.warning("index.json not found")
+    return {"error": "index.json not found"}, 404
 
-    logger.info(f"Downloading from Telegram URL: {file_url}")
+@app.get("/repo/packages/{file_name}")
+async def get_package(file_name: str):
+    p = PACKAGES / file_name
+    if p.exists():
+        logger.info(f"Serving package {file_name}")
+        return FileResponse(p)
+    logger.warning(f"Package not found: {file_name}")
+    return {"error": "file not found"}, 404
 
-    async with aiohttp.ClientSession() as session:
-        async with session.get(file_url) as resp:
-            resp.raise_for_status()
-            with open(dest, "wb") as fd:
-                async for chunk in resp.content.iter_chunked(64 * 1024):
-                    fd.write(chunk)
+@app.get("/repo/images/{file_name}")
+async def get_image(file_name: str):
+    p = IMAGES / file_name
+    if p.exists():
+        logger.info(f"Serving image {file_name}")
+        return FileResponse(p)
+    logger.warning(f"Image not found: {file_name}")
+    return {"error": "file not found"}, 404
+    
+@app.post("/upload")
+async def upload_ipa(file: UploadFile = File(...)):
+    filename = file.filename
+    target = PACKAGES / filename
 
+    with open(target, "wb") as f:
+        while chunk := await file.read(1024 * 1024):
+            f.write(chunk)
 
-# -----------------------------
-# Обработка документа (.ipa)
-# -----------------------------
-async def handle_document(message: types.Message, bot):
-    doc = message.document
+    return {"status": "ok", "saved": filename}
+    
+app.mount("/webapp", StaticFiles(directory="webapp"), name="webapp")
 
-    if not doc or not doc.file_name.lower().endswith(".ipa"):
-        await message.answer("Пожалуйста, отправляйте только файлы .ipa")
-        return
+# import bot start after app defined to avoid circular imports
+from bot.bot import start_bot  # local import
 
-    target = PACKAGES / doc.file_name
+async def start_services():
+    import uvicorn
+    host = "0.0.0.0"
+    port = int(os.getenv("PORT", 8000))
+    cfg = uvicorn.Config(app, host=host, port=port, log_level="info")
+    server = uvicorn.Server(cfg)
+    logger.info("Starting FastAPI + Telegram bot...")
+    await asyncio.gather(server.serve(), start_bot())
 
-    await message.answer("🔄 Пытаюсь скачать файл через Telegram…")
-
+if __name__ == "__main__":
+    logger.info("Starting main.py")
     try:
-        # --- Скачиваем через Telegram API ---
-        await _download_via_telegram_url(bot, doc.file_id, target)
-        logger.info(f"Saved IPA: {target}")
-
-        # Извлекаем метаданные IPA
-        meta = extract_ipa_metadata(target)
-        meta.setdefault("name", target.stem)
-        meta.setdefault("bundle_id", "/skip")
-        meta.setdefault("version", "/skip")
-        meta.setdefault("icon", None)
-
-        meta_file = target.with_suffix(".json")
-
-        if not meta_file.exists():
-            meta_to_save = {
-                "name": meta["name"],
-                "bundle_id": meta["bundle_id"] or "/skip",
-                "version": meta["version"] or "/skip",
-                "icon": meta["icon"] or "/skip"
-            }
-            meta_file.write_text(
-                json.dumps(meta_to_save, indent=4, ensure_ascii=False),
-                encoding="utf-8"
-            )
-            logger.info(f"Wrote meta file: {meta_file}")
-
-        await message.answer(f"Файл {doc.file_name} сохранён через Telegram API ✅")
-
-    except TelegramBadRequest as e:
-        if "file is too big" in str(e).lower():
-            # --- Файл слишком большой ---
-            server = os.getenv("SERVER_URL", "").rstrip("/")
-            upload_url = f"{server}/upload"
-
-            logger.warning("File too big for Telegram API — fallback to /upload")
-
-            await message.answer(
-                "⚠️ Файл слишком большой для загрузки через Telegram.\n\n"
-                f"➡️ Загрузите его вручную через WebApp:\n/upload"
-            )
-        else:
-            logger.exception("TelegramBadRequest during download")
-            await message.answer("Ошибка Telegram API ❌")
-
-    except Exception as e:
-        logger.exception("Failed to download file")
-        await message.answer("Ошибка при скачивании файла ❌")
-
-
-# -----------------------------
-# Команда /repo — генерация index.json
-# -----------------------------
-async def cmd_repo(message: types.Message):
-    index_file = BASE / "index.json"
-    server_url = os.getenv("SERVER_URL", "").rstrip("/")
-    entries = []
-
-    for ipa in PACKAGES.glob("*.ipa"):
-        meta = {}
-        meta_file = ipa.with_suffix(".json")
-
-        if meta_file.exists():
-            try:
-                meta = json.loads(meta_file.read_text(encoding="utf-8"))
-            except Exception as e:
-                logger.warning(f"Bad meta {meta_file}: {e}")
-                meta = {}
-
-        meta.setdefault("name", ipa.stem)
-        meta.setdefault("bundle_id", "/skip")
-        meta.setdefault("version", "/skip")
-        meta.setdefault("icon", "/skip")
-
-        meta["url"] = (
-            f"{server_url}/repo/packages/{ipa.name}"
-            if server_url else f"/repo/packages/{ipa.name}"
-        )
-
-        entries.append(meta)
-
-    index_file.write_text(
-        json.dumps(entries, indent=4, ensure_ascii=False),
-        encoding="utf-8"
-    )
-
-    logger.info(f"index.json generated ({len(entries)} entries)")
-
-    await message.answer(
-        f"index.json обновлён ({len(entries)} apps)\n"
-        f"{os.getenv('SERVER_URL', '')}/repo/index.json"
-    )
-
-
-# -----------------------------
-# Команда /start
-# -----------------------------
-async def cmd_start(message: types.Message):
-    await message.answer(
-        "👋 bw_ipa_repo bot\n\n"
-        "• Отправь мне файл .ipa — я сохраню его в репозиторий.\n"
-        "• (опционально) добавь рядом файл .json с метаданными.\n"
-        "• Командой /repo собери новый index.json.\n"
-        "• Командой /upload открой WebApp для загрузки больших файлов."
-    )
-
-
-# -----------------------------
-# Команда /upload → Telegram WebApp
-# -----------------------------
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
-
-async def cmd_upload(message: types.Message):
-    server = os.getenv("SERVER_URL", "").rstrip("/")
-    url = f"{server}/webapp/"
-
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="📤 Upload IPA (WebApp)",
-                    web_app=WebAppInfo(url=url)
-                )
-            ]
-        ]
-    )
-
-    await message.answer("Открываю WebApp для загрузки IPA:", reply_markup=kb)
-
-
-# -----------------------------
-# Регистрация хэндлеров
-# -----------------------------
-def register_handlers(dp: Dispatcher):
-    dp.message.register(
-        handle_document,
-        lambda m: m.document is not None and m.document.file_name.lower().endswith(".ipa")
-    )
-    dp.message.register(cmd_repo, Command(commands=["repo"]))
-    dp.message.register(cmd_start, Command(commands=["start"]))
-    dp.message.register(cmd_upload, Command(commands=["upload"]))
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(start_services())
+    except RuntimeError:
+        # fallback if event loop is already running
+        asyncio.run(start_services())
