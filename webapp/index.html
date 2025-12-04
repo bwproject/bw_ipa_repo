@@ -2,92 +2,166 @@
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Upload IPA</title>
+    <title>ProjectBW Repository - Upload IPA</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
     <style>
+        /* === BODY + BACKGROUND === */
         body {
-            background: #111;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: url("https://wallpapers.com/images/high/4k-ultra-hd-galaxy-violet-clouds-13597ri09s5378hu.webp") no-repeat center center fixed;
+            background-size: cover;
+            text-align: center;
             color: white;
-            font-family: sans-serif;
-            padding: 20px;
+        }
+
+        /* === HEADER === */
+        .header {
+            padding: 25px 0;
+            text-align: center;
+        }
+
+        .header img {
+            height: 80px;
+            margin-bottom: 10px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 32px;
+            text-shadow: 0 0 10px #8800ff;
+        }
+
+        /* === Glass Card === */
+        .card {
+            background: rgba(255,255,255,0.06);
+            padding: 25px;
+            border-radius: 20px;
+            backdrop-filter: blur(25px);
+            box-shadow: 0 0 18px rgba(150, 0, 255, 0.25);
+            border: 1px solid rgba(255,255,255,0.1);
+            max-width: 500px;
+            margin: 20px auto 50px auto;
         }
 
         h2 {
-            margin-bottom: 20px;
-        }
-
-        #drop-zone {
-            border: 2px dashed #888;
-            border-radius: 10px;
-            padding: 50px;
             text-align: center;
             margin-bottom: 20px;
+            font-weight: 600;
+            text-shadow: 0 0 8px #8800ff;
+        }
+
+        /* Drag & Drop */
+        #drop-zone {
+            border: 2px dashed rgba(255,255,255,0.3);
+            border-radius: 15px;
+            padding: 50px 20px;
+            text-align: center;
             cursor: pointer;
-            transition: 0.2s;
+            transition: 0.25s;
+            color: #ddd;
+            font-size: 16px;
         }
 
         #drop-zone.hover {
-            border-color: #0f0;
-            background: #222;
+            border-color: #9b4dff;
+            background: rgba(155, 77, 255, 0.15);
+            box-shadow: 0 0 12px rgba(155, 77, 255, 0.6);
         }
 
+        /* Upload button */
         #upload {
-            padding: 12px 25px;
+            width: 100%;
+            padding: 14px;
+            margin-top: 18px;
             font-size: 16px;
-            border-radius: 6px;
             border: none;
+            border-radius: 12px;
             cursor: pointer;
+            background: linear-gradient(90deg, #8a2be2, #ff2dd9);
+            color: white;
+            box-shadow: 0 0 15px rgba(138, 43, 226, 0.5);
+            transition: 0.2s;
+        }
+
+        #upload:hover {
+            transform: scale(1.03);
+            box-shadow: 0 0 22px rgba(255,0,255,0.7);
         }
 
         #status {
             margin-top: 20px;
-            word-break: break-all;
+            text-align: center;
+            font-size: 15px;
+            min-height: 20px;
         }
 
-        /* === ПРОГРЕСС-БАР === */
+        /* === PROGRESS BAR === */
         #progress-container {
             width: 100%;
-            height: 22px;
-            background: #333;
-            border-radius: 10px;
-            margin-top: 15px;
+            height: 26px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            margin-top: 25px;
             overflow: hidden;
             display: none;
+            border: 1px solid rgba(255,255,255,0.15);
         }
 
         #progress-bar {
             height: 100%;
             width: 0%;
-            background: linear-gradient(90deg, #00ff66, #22ff88);
-            transition: width 0.15s;
+            background: linear-gradient(90deg, #6200ff, #ff0099);
+            background-size: 300% 100%;
+            animation: gradientFlow 2s linear infinite;
+            transition: width 0.15s ease-out;
+        }
+
+        @keyframes gradientFlow {
+            0% { background-position: 0% 0; }
+            100% { background-position: 300% 0; }
         }
 
         #speed-info {
-            margin-top: 10px;
-            color: #ccc;
+            margin-top: 12px;
+            color: #aaa;
             font-size: 14px;
+            text-align: center;
             display: none;
         }
+
     </style>
 </head>
 
 <body>
-    <h2>Upload IPA File</h2>
 
-    <div id="drop-zone">Drag & Drop .ipa file here or click to select</div>
-
-    <input id="file" type="file" accept=".ipa" style="display:none">
-
-    <button id="upload">Upload</button>
-
-    <div id="status"></div>
-
-    <div id="progress-container">
-        <div id="progress-bar"></div>
+    <!-- HEADER -->
+    <div class="header">
+        <img src="https://raw.githubusercontent.com/bwproject/projectbw-wiki/refs/heads/master/docs/.vuepress/public/images/logo.png" alt="ProjectBW Logo">
+        <h1>ProjectBW Repository</h1>
     </div>
 
-    <div id="speed-info"></div>
+    <!-- UPLOAD CARD -->
+    <div class="card">
+
+        <h2>Upload IPA File</h2>
+
+        <div id="drop-zone">📦 Drag & Drop .ipa file here<br>or tap to choose</div>
+
+        <input id="file" type="file" accept=".ipa" style="display:none">
+
+        <button id="upload">Upload</button>
+
+        <div id="status"></div>
+
+        <div id="progress-container">
+            <div id="progress-bar"></div>
+        </div>
+
+        <div id="speed-info"></div>
+    </div>
 
     <script src="upload.js"></script>
 </body>
