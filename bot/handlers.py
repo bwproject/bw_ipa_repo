@@ -4,6 +4,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from datetime import datetime
 
 import aiohttp
 from aiogram import types, Dispatcher
@@ -15,20 +16,6 @@ from bot.utils import extract_ipa_metadata
 
 logger = logging.getLogger("bot.handlers")
 
-# -----------------------------
-# Шапка репозитория (фиксированная)
-# -----------------------------
-REPO_INFO = {
-    "name": "ProjectBW Repository",
-    "identifier": "projectbw.ksign-repo",
-    "subtitle": "A source for Ksign app",
-    "description": "repo prohectbw.ru",
-    "iconURL": "https://raw.githubusercontent.com/bwproject/projectbw-wiki/refs/heads/master/docs/.vuepress/public/images/logo.png",
-    "website": "https://projectbw.ru/ios",
-    "tintColor": "3c94fc",
-    "apps": []  # будет генерироваться динамически
-}
-
 # Папки
 BASE = Path("repo")
 PACKAGES = BASE / "packages"
@@ -36,6 +23,19 @@ IMAGES = BASE / "images"
 PACKAGES.mkdir(parents=True, exist_ok=True)
 IMAGES.mkdir(parents=True, exist_ok=True)
 
+# -----------------------------
+# Верхние данные репозитория
+# -----------------------------
+REPO_INFO = {
+    "name": "ProjectBW Repository",
+    "identifier": "projectbw.ksign-repo",
+    "subtitle": "A source for ProjectBW apps",
+    "description": "repo projectbw.ru",
+    "iconURL": "https://raw.githubusercontent.com/bwproject/projectbw-wiki/refs/heads/master/docs/.vuepress/public/images/logo.png",
+    "website": "https://projectbw.ru/ios",
+    "tintColor": "3c94fc",
+    "apps": []
+}
 
 # -----------------------------
 # Скачивание через Telegram API
@@ -53,7 +53,6 @@ async def _download_via_telegram_url(bot, file_id: str, dest: Path):
                 async for chunk in resp.content.iter_chunked(64 * 1024):
                     fd.write(chunk)
 
-
 # -----------------------------
 # Обработка документа (.ipa)
 # -----------------------------
@@ -68,33 +67,33 @@ async def handle_document(message: types.Message, bot):
     await message.answer("🔄 Пытаюсь скачать файл через Telegram…")
 
     try:
+        # --- Скачиваем через Telegram API ---
         await _download_via_telegram_url(bot, doc.file_id, target)
         logger.info(f"Saved IPA: {target}")
 
         # metadata
         meta = extract_ipa_metadata(target)
         meta.setdefault("name", target.stem)
-        meta.setdefault("bundle_id", None)
-        meta.setdefault("version", None)
-        meta.setdefault("icon", None)
 
         meta_file = target.with_suffix(".json")
-        if not meta_file.exists():
-            meta_to_save = {
-                "name": meta["name"],
-                "bundleIdentifier": meta["bundle_id"],
-                "version": meta["version"],
-                "iconURL": meta["icon"]
-            }
-            meta_file.write_text(
-                json.dumps(meta_to_save, indent=4, ensure_ascii=False),
-                encoding="utf-8"
-            )
-            logger.info(f"Wrote meta file: {meta_file}")
+        if meta_file.exists():
+            try:
+                user_meta = json.loads(meta_file.read_text(encoding="utf-8"))
+                meta.update(user_meta)
+            except Exception as e:
+                logger.warning(f"Failed to load meta {meta_file}: {e}")
+
+        # Записываем метаданные в json рядом с IPA
+        meta_file.write_text(
+            json.dumps(meta, indent=4, ensure_ascii=False),
+            encoding="utf-8"
+        )
+        logger.info(f"Wrote meta file: {meta_file}")
 
         await message.answer(f"Файл {doc.file_name} сохранён через Telegram API ✅")
 
     except TelegramBadRequest as e:
+        # --- Файл слишком большой ---
         if "file is too big" in str(e).lower():
             server = os.getenv("SERVER_URL", "").rstrip("/")
             upload_url = f"{server}/webapp"
@@ -126,43 +125,64 @@ async def handle_document(message: types.Message, bot):
 
 
 # -----------------------------
-# Команда /repo — генерация index.json
+# Команда /repo — генерация index.json в AltStore/Ksign формате
 # -----------------------------
 async def cmd_repo(message: types.Message):
-    index_file = BASE / "index.json"
     server_url = os.getenv("SERVER_URL", "").rstrip("/")
-
-    repo_data = REPO_INFO.copy()
-    apps_list = []
+    apps = []
 
     for ipa in PACKAGES.glob("*.ipa"):
-        meta_file = ipa.with_suffix(".json")
         meta = {}
+        meta_file = ipa.with_suffix(".json")
         if meta_file.exists():
             try:
                 meta = json.loads(meta_file.read_text(encoding="utf-8"))
             except Exception as e:
                 logger.warning(f"Bad meta {meta_file}: {e}")
+                meta = {}
+        else:
+            # Если json нет, извлекаем из ipa
+            meta = extract_ipa_metadata(ipa)
+            meta.setdefault("name", ipa.stem)
 
-        # Заполняем недостающие поля
-        meta.setdefault("name", ipa.stem)
-        meta.setdefault("bundleIdentifier", None)
-        meta.setdefault("version", None)
-        meta.setdefault("iconURL", None)
+        # Формируем блок приложения с версией
+        version_info = {
+            "downloadURL": f"{server_url}/repo/packages/{ipa.name}" if server_url else f"/repo/packages/{ipa.name}",
+            "version": meta.get("version", "1.0"),
+            "buildVersion": meta.get("buildVersion", "1"),
+            "size": ipa.stat().st_size,
+            "date": datetime.utcnow().isoformat() + "Z",
+            "localizedDescription": meta.get("description", "")
+        }
 
-        meta["downloadURL"] = f"{server_url}/repo/packages/{ipa.name}" if server_url else f"/repo/packages/{ipa.name}"
-        apps_list.append(meta)
+        app_entry = {
+            "name": meta.get("name", ipa.stem),
+            "bundleIdentifier": meta.get("bundle_id", ipa.stem),
+            "developerName": meta.get("developerName", "ProjectBW"),
+            "iconURL": f"{server_url}/repo/images/{meta.get('icon')}" if meta.get("icon") else None,
+            "localizedDescription": meta.get("description", ""),
+            "subtitle": meta.get("subtitle", ""),
+            "tintColor": "3c94fc",
+            "category": meta.get("category", "utilities"),
+            "versions": [version_info],
+            "appPermissions": {}
+        }
 
-    repo_data["apps"] = apps_list
+        apps.append(app_entry)
 
-    index_file.write_text(json.dumps(repo_data, indent=4, ensure_ascii=False), encoding="utf-8")
-    logger.info(f"index.json generated ({len(apps_list)} apps)")
+    # Сохраняем полный JSON
+    repo_json = REPO_INFO.copy()
+    repo_json["apps"] = apps
 
-    await message.answer(f"index.json обновлён ({len(apps_list)} apps)\n{server_url}/repo/index.json")
+    index_file = BASE / "index.json"
+    index_file.write_text(json.dumps(repo_json, indent=4, ensure_ascii=False), encoding="utf-8")
+    logger.info(f"index.json generated ({len(apps)} apps)")
+
+    await message.answer(f"index.json обновлён ({len(apps)} apps)\n{server_url}/repo/index.json")
 
 
 # -----------------------------
-# Команда /start
+# Команды /start и /upload
 # -----------------------------
 async def cmd_start(message: types.Message):
     await message.answer(
@@ -174,9 +194,6 @@ async def cmd_start(message: types.Message):
     )
 
 
-# -----------------------------
-# Команда /upload — открыть WebApp
-# -----------------------------
 async def cmd_upload(message: types.Message):
     server = os.getenv("SERVER_URL", "").rstrip("/")
     upload_url = f"{server}/webapp"
