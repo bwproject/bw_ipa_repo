@@ -81,7 +81,7 @@ async def upload_ipa(file: UploadFile = File(...)):
     return {"status": "ok", "saved": filename}
 
 # ======== Статика / webapp ========
-app.mount("/webapp", StaticFiles(directory="webapp"), name="webapp")
+app.mount("/webapp", StaticFiles(directory="webapp", html=True), name="webapp")
 
 # ======== Запуск Telegram бота и FastAPI ========
 from bot.bot import start_bot  # локальный импорт, чтобы избежать circular import
