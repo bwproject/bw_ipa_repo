@@ -1,3 +1,5 @@
+# handlers.py
+
 from aiogram import types, Dispatcher
 from aiogram.filters import Command
 from pathlib import Path
