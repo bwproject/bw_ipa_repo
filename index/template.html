@@ -4,24 +4,110 @@
     <meta charset="UTF-8">
     <title>ProjectBW Repository</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 2em; background: #f5f5f5; text-align: center; }
-        header { margin-bottom: 2em; }
-        header img { max-width: 120px; border-radius: 16px; }
-        header h1 { margin: 0.5em 0 0.2em 0; font-size: 1.8em; }
-        header p { font-size: 1em; color: #555; margin-top: 0.2em; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: url("https://wallpapers.com/images/high/4k-ultra-hd-galaxy-violet-clouds-13597ri09s5378hu.webp") no-repeat center center fixed;
+            background-size: cover;
+            text-align: center;
+        }
 
-        .apps-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.5em; margin-top: 2em; }
-        .app-card { background: #fff; border: 1px solid #ddd; border-radius: 8px; width: 150px; text-align: center; padding: 1em; box-shadow: 0 2px 5px rgba(0,0,0,0.1); transition: transform 0.2s; }
+        /* Полупрозрачный затемнённый контейнер */
+        .content {
+            max-width: 900px;
+            margin: 2em auto;
+            padding: 2em;
+            background: rgba(0, 0, 0, 0.55);
+            border-radius: 16px;
+            color: white;
+            backdrop-filter: blur(6px);
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        header img {
+            max-width: 140px;
+            border-radius: 20px;
+        }
+
+        header h1 {
+            margin: 0.5em 0 0.2em 0;
+            font-size: 2em;
+        }
+
+        header p {
+            font-size: 1.1em;
+            color: #ddd;
+        }
+
+        .apps-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 1.5em;
+            margin-top: 2em;
+        }
+
+        .app-card {
+            background: rgba(255,255,255,0.12);
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 12px;
+            width: 160px;
+            text-align: center;
+            padding: 1em;
+            backdrop-filter: blur(4px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            transition: transform 0.2s;
+        }
+
         .app-card:hover { transform: translateY(-5px); }
-        .app-card img { border-radius: 16px; max-width: 128px; max-height: 128px; width: auto; height: auto; }
-        .app-info { margin-top: 0.5em; }
-        .app-name { font-weight: bold; margin-bottom: 0.25em; }
-        .app-bundle, .app-version { font-size: 0.85em; color: #555; margin-bottom: 0.25em; word-break: break-word; }
-        .download-btn, .ksing-btn { display: inline-block; margin: 0.25em 0; padding: 0.3em 0.6em; background: #007bff; color: #fff; text-decoration: none; border-radius: 4px; font-size: 0.85em; cursor: pointer; }
-        .download-btn:hover, .ksing-btn:hover { background: #0056b3; }
 
-        .bottom-buttons { margin-top: 3em; display: flex; flex-direction: column; gap: 1em; align-items: center; }
-        .bottom-buttons button { padding: 0.5em 1em; font-size: 1em; border-radius: 6px; border: none; background: #28a745; color: #fff; cursor: pointer; }
+        .app-card img {
+            border-radius: 16px;
+            max-width: 128px;
+            max-height: 128px;
+        }
+
+        .app-name { font-weight: bold; margin: 0.25em 0; }
+        .app-bundle, .app-version {
+            font-size: 0.85em;
+            color: #eee;
+            word-break: break-word;
+        }
+
+        .download-btn, .ksing-btn {
+            display: block;
+            margin: 0.4em 0;
+            padding: 0.4em 0.6em;
+            background: #3c94fc;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 0.85em;
+        }
+
+        .download-btn:hover, .ksing-btn:hover {
+            background: #1b6cd9;
+        }
+
+        .bottom-buttons {
+            margin-top: 3em;
+            display: flex;
+            flex-direction: column;
+            gap: 1em;
+            align-items: center;
+        }
+
+        .bottom-buttons button {
+            padding: 0.6em 1.2em;
+            font-size: 1em;
+            border-radius: 6px;
+            border: none;
+            background: #28a745;
+            color: #fff;
+            cursor: pointer;
+        }
+
         .bottom-buttons button:hover { background: #1e7e34; }
 
         @media (max-width: 600px) { .app-card { width: 45%; } }
@@ -29,6 +115,8 @@
     </style>
 </head>
 <body>
+
+<div class="content">
     <header>
         <img src="https://raw.githubusercontent.com/bwproject/projectbw-wiki/refs/heads/master/docs/.vuepress/public/images/logo.png" alt="ProjectBW Logo">
         <h1>ProjectBW Repository</h1>
@@ -41,61 +129,58 @@
         <button onclick="copyRepoURL()">Скопировать URL репозитория</button>
         <button onclick="addRepoToKsing()">Добавить репозиторий в Ksing</button>
     </div>
+</div>
 
-    <script>
-        const REPO_URL = "https://ipa.projectbw.ru/repo/index.json"; // URL репозитория
+<script>
+    const REPO_URL = "https://ipa.projectbw.ru/repo/index.json";
 
-        async function loadApps() {
-            try {
-                const res = await fetch(REPO_URL);
-                const data = await res.json();
-                const apps = Array.isArray(data.apps) ? data.apps : [];
-                
-                const container = document.getElementById("apps-container");
-                container.innerHTML = "";
+    async function loadApps() {
+        try {
+            const res = await fetch(REPO_URL);
+            const data = await res.json();
+            const apps = Array.isArray(data.apps) ? data.apps : [];
+            
+            const container = document.getElementById("apps-container");
+            container.innerHTML = "";
 
-                apps.forEach(app => {
-                    const name = app.name || "Unnamed";
-                    const bundle = app.bundleIdentifier || "";
-                    const version = app.versions?.[0]?.version || "N/A";
-                    const ipa_link = app.versions?.[0]?.downloadURL || "#";
-                    const img_link = app.iconURL || "https://via.placeholder.com/128";
+            apps.forEach(app => {
+                const name = app.name || "Unnamed";
+                const bundle = app.bundleIdentifier || "";
+                const version = app.versions?.[0]?.version || "N/A";
+                const ipa_link = app.versions?.[0]?.downloadURL || "#";
+                const img_link = app.iconURL || "https://via.placeholder.com/128";
 
-                    const card = document.createElement("div");
-                    card.className = "app-card";
-                    card.innerHTML = `
-                        <img src="${img_link}" alt="${name}">
-                        <div class="app-info">
-                            <div class="app-name">${name}</div>
-                            <div class="app-bundle">${bundle}</div>
-                            <div class="app-version">${version}</div>
-                            <a href="${ipa_link}" class="download-btn" target="_blank">Скачать</a>
-                            <a href="ksing://add?url=${encodeURIComponent(ipa_link)}" class="ksing-btn">Скачать в Ksing</a>
-                        </div>
-                    `;
-                    container.appendChild(card);
-                });
-
-            } catch (err) {
-                document.getElementById("apps-container").innerHTML = `<p style="color:red;">Error loading apps: ${err.message}</p>`;
-                console.error(err);
-            }
-        }
-
-        function copyRepoURL() {
-            navigator.clipboard.writeText(REPO_URL).then(() => {
-                alert("URL репозитория скопирован!");
-            }).catch(err => {
-                alert("Ошибка копирования: " + err);
+                const card = document.createElement("div");
+                card.className = "app-card";
+                card.innerHTML = `
+                    <img src="${img_link}" alt="${name}">
+                    <div class="app-name">${name}</div>
+                    <div class="app-bundle">${bundle}</div>
+                    <div class="app-version">${version}</div>
+                    <a href="${ipa_link}" class="download-btn" target="_blank">Скачать</a>
+                    <a href="ksing://add?url=${encodeURIComponent(ipa_link)}" class="ksing-btn">Скачать в Ksing</a>
+                `;
+                container.appendChild(card);
             });
-        }
 
-        function addRepoToKsing() {
-            const ksingURL = `ksing://add?url=${encodeURIComponent(REPO_URL)}`;
-            window.location.href = ksingURL;
+        } catch (err) {
+            document.getElementById("apps-container").innerHTML =
+                `<p style="color:red;">Error loading apps: ${err.message}</p>`;
         }
+    }
 
-        loadApps();
-    </script>
+    function copyRepoURL() {
+        navigator.clipboard.writeText(REPO_URL)
+            .then(() => alert("URL репозитория скопирован!"))
+            .catch(err => alert("Ошибка копирования: " + err));
+    }
+
+    function addRepoToKsing() {
+        window.location.href = `ksing://add?url=${encodeURIComponent(REPO_URL)}`;
+    }
+
+    loadApps();
+</script>
+
 </body>
 </html>
