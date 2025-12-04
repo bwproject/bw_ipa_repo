@@ -1,1 +1,8 @@
-# bw_ipa_repo rebuild B
+# bw_ipa_repo
+
+Телеграм-бот + FastAPI для self-host IPA repository.
+
+## Quick start
+
+1. Создай .env из .env.example и заполни BOT_TOKEN, SERVER_URL, PORT.
+2. Установи:
