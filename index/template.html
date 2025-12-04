@@ -27,18 +27,18 @@
         async function loadApps() {
             try {
                 const res = await fetch("https://ipa.projectbw.ru/repo/index.json");
-                const apps = await res.json();
+                const data = await res.json();
+                const apps = Array.isArray(data.apps) ? data.apps : [];
+                
                 const container = document.getElementById("apps-container");
                 container.innerHTML = "";
+                
                 apps.forEach(app => {
                     const name = app.name || "Unnamed";
-                    const version = app.version || "N/A";
                     const bundle = app.bundleIdentifier || "";
-                    const file_name = app.file_name || "";
-                    const icon = app.icon || "https://via.placeholder.com/128";
-
-                    const ipa_link = file_name ? `/repo/packages/${file_name}` : "#";
-                    const img_link = icon.startsWith("http") ? icon : `/repo/images/${icon}`;
+                    const version = app.versions?.[0]?.version || "N/A";
+                    const ipa_link = app.versions?.[0]?.downloadURL || "#";
+                    const img_link = app.iconURL || "https://via.placeholder.com/128";
 
                     const card = document.createElement("div");
                     card.className = "app-card";
@@ -53,10 +53,13 @@
                     `;
                     container.appendChild(card);
                 });
+
             } catch (err) {
                 document.getElementById("apps-container").innerHTML = `<p style="color:red;">Error loading apps: ${err.message}</p>`;
+                console.error(err);
             }
         }
+
         loadApps();
     </script>
 </body>
