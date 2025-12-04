@@ -8,6 +8,7 @@ from aiogram import types, Dispatcher
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiogram.exceptions import TelegramBadRequest
+from bot.handlers_packages import register_packages_handlers
 
 from bot.utils import extract_ipa_metadata, get_file_size
 
@@ -248,3 +249,7 @@ def register_handlers(dp: Dispatcher):
     dp.message.register(cmd_repo, Command(commands=["repo"]))
     dp.message.register(cmd_start, Command(commands=["start"]))
     dp.message.register(cmd_upload, Command(commands=["upload"]))
+
+def register_handlers(dp: Dispatcher):
+    ...
+    register_packages_handlers(dp)
