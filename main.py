@@ -11,6 +11,7 @@ from pathlib import Path
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+import aiohttp  # для асинхронного скачивания remote index.json
 
 load_dotenv()
 
@@ -22,7 +23,7 @@ logging.basicConfig(
 logger = logging.getLogger("bw_ipa_repo")
 
 # Paths
-BASE = Path("repo")
+BASE = Path("repo")          # локальная папка repo
 PACKAGES = BASE / "packages"
 IMAGES = BASE / "images"
 INDEX_HTML = Path("index/template.html")  # Шаблон HTML для корня
@@ -34,21 +35,59 @@ IMAGES.mkdir(parents=True, exist_ok=True)
 # FastAPI app
 app = FastAPI(title="bw_ipa_repo")
 
+# ======================
+# Функция загрузки index.json
+# ======================
+async def load_index_json() -> list:
+    """
+    Загружает index.json из локального файла /repo/index.json или с внешней ссылки.
+    Возвращает список приложений.
+    """
+    local_path = BASE / "index.json"
+    
+    # 1. Пробуем локальный файл
+    if local_path.exists():
+        try:
+            with open(local_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    logger.info(f"Loaded index.json from LOCAL file: {local_path}")
+                    return data
+                else:
+                    logger.warning(f"Local index.json is not a list: {local_path}")
+        except Exception as e:
+            logger.warning(f"Failed to read local index.json {local_path}: {e}")
+
+    # 2. Пробуем скачать с внешнего URL
+    url = "https://ipa.projectbw.ru/repo/index.json"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if isinstance(data, list):
+                        # Сохраняем локально на будущее
+                        with open(local_path, "w", encoding="utf-8") as f:
+                            json.dump(data, f, indent=2, ensure_ascii=False)
+                        logger.info(f"Loaded index.json from REMOTE URL: {url} and saved to {local_path}")
+                        return data
+                    else:
+                        logger.error(f"Remote index.json is not a list: {url}")
+                else:
+                    logger.error(f"Failed to fetch remote index.json, status: {resp.status}, url: {url}")
+    except Exception as e:
+        logger.exception(f"Error fetching remote index.json: {url}: {e}")
+
+    # Если ничего не получилось — возвращаем пустой список
+    logger.error("Failed to load index.json from both local and remote sources")
+    return []
+
 # ======== Корневой маршрут / ========
 @app.get("/", response_class=HTMLResponse)
 async def root_index():
-    index_file = BASE / "index.json"
-    if not index_file.exists():
-        return HTMLResponse("<h1>index.json not found</h1>", status_code=404)
-
-    try:
-        with open(index_file, "r", encoding="utf-8") as f:
-            apps = json.load(f)
-            if not isinstance(apps, list):
-                raise ValueError("index.json should contain a list")
-    except Exception as e:
-        logger.exception("Error reading index.json")
-        return HTMLResponse(f"<h1>Failed to read index.json</h1><pre>{e}</pre>", status_code=500)
+    apps = await load_index_json()
+    if not apps:
+        return HTMLResponse("<h1>Failed to read index.json</h1>", status_code=500)
 
     if not INDEX_HTML.exists():
         return HTMLResponse("<h1>HTML template not found</h1>", status_code=500)
@@ -110,6 +149,7 @@ async def get_image(file_name: str):
     logger.warning(f"Image not found: {file_name}")
     return {"error": "file not found"}, 404
 
+# ======== Загрузка IPA ========
 @app.post("/upload")
 async def upload_ipa(file: UploadFile = File(...)):
     filename = file.filename
@@ -121,10 +161,11 @@ async def upload_ipa(file: UploadFile = File(...)):
 
     return {"status": "ok", "saved": filename}
 
+# ======== Статика / webapp ========
 app.mount("/webapp", StaticFiles(directory="webapp"), name="webapp")
 
-# import bot start after app defined to avoid circular imports
-from bot.bot import start_bot  # local import
+# ======== Запуск Telegram бота и FastAPI ========
+from bot.bot import start_bot  # локальный импорт, чтобы избежать circular import
 
 async def start_services():
     import uvicorn
