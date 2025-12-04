@@ -4,15 +4,85 @@
     <meta charset="UTF-8">
     <title>BW IPA Repo</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 2em; }
-        ul { list-style-type: none; padding: 0; }
-        li { margin-bottom: 1em; display: flex; align-items: center; gap: 1em; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 2em;
+            background: #f5f5f5;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 2em;
+        }
+        .apps-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 1.5em;
+        }
+        .app-card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            width: 150px;
+            text-align: center;
+            padding: 1em;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .app-card:hover {
+            transform: translateY(-5px);
+        }
+        .app-card img {
+            border-radius: 16px;
+            max-width: 128px;
+            max-height: 128px;
+            width: auto;
+            height: auto;
+        }
+        .app-info {
+            margin-top: 0.5em;
+        }
+        .app-name {
+            font-weight: bold;
+            margin-bottom: 0.25em;
+        }
+        .app-bundle, .app-version {
+            font-size: 0.85em;
+            color: #555;
+            margin-bottom: 0.25em;
+            word-break: break-word;
+        }
+        .download-btn {
+            display: inline-block;
+            margin-top: 0.5em;
+            padding: 0.3em 0.6em;
+            background: #007bff;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+        .download-btn:hover {
+            background: #0056b3;
+        }
+
+        /* Адаптивность */
+        @media (max-width: 600px) {
+            .app-card {
+                width: 45%;
+            }
+        }
+        @media (max-width: 400px) {
+            .app-card {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
     <h1>Applications</h1>
-    <ul>
+    <div class="apps-container">
         {{APPS_LIST}}
-    </ul>
+    </div>
 </body>
 </html>
