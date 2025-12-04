@@ -11,7 +11,7 @@ from aiogram.filters import Command
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
-from bot.utils import extract_ipa_metadata
+from bot.utils import extract_ipa_metadata  # обновлённая версия
 
 logger = logging.getLogger("bot.handlers")
 
@@ -60,21 +60,11 @@ async def handle_document(message: types.Message, bot):
 
         # metadata
         meta = extract_ipa_metadata(target)
-        meta.setdefault("name", target.stem)
-        meta.setdefault("bundle_id", "/skip")
-        meta.setdefault("version", "/skip")
-        meta.setdefault("icon", None)
-
         meta_file = target.with_suffix(".json")
+
         if not meta_file.exists():
-            meta_to_save = {
-                "name": meta["name"],
-                "bundle_id": meta["bundle_id"] or "/skip",
-                "version": meta["version"] or "/skip",
-                "icon": meta["icon"] or "/skip"
-            }
             meta_file.write_text(
-                json.dumps(meta_to_save, indent=4, ensure_ascii=False),
+                json.dumps(meta, indent=4, ensure_ascii=False),
                 encoding="utf-8"
             )
             logger.info(f"Wrote meta file: {meta_file}")
@@ -82,7 +72,6 @@ async def handle_document(message: types.Message, bot):
         await message.answer(f"Файл {doc.file_name} сохранён через Telegram API ✅")
 
     except TelegramBadRequest as e:
-        # --- Файл слишком большой ---
         if "file is too big" in str(e).lower():
             server = os.getenv("SERVER_URL", "").rstrip("/")
             upload_url = f"{server}/webapp"
@@ -114,7 +103,7 @@ async def handle_document(message: types.Message, bot):
 
 
 # -----------------------------
-# Команда /repo — генерация index.json
+# Команда /repo — генерация Ksign-совместимого index.json
 # -----------------------------
 async def cmd_repo(message: types.Message):
     index_file = BASE / "index.json"
@@ -122,33 +111,39 @@ async def cmd_repo(message: types.Message):
     entries = []
 
     for ipa in PACKAGES.glob("*.ipa"):
-        meta = {}
+        # извлекаем метаданные из .ipa, если .json нет или неполный
         meta_file = ipa.with_suffix(".json")
+        meta = {}
         if meta_file.exists():
             try:
                 meta = json.loads(meta_file.read_text(encoding="utf-8"))
             except Exception as e:
                 logger.warning(f"Bad meta {meta_file}: {e}")
-                meta = {}
+                meta = extract_ipa_metadata(ipa)
         else:
-            # если нет .json — извлекаем из IPA
             meta = extract_ipa_metadata(ipa)
-            meta_file.write_text(
-                json.dumps(meta, indent=4, ensure_ascii=False),
-                encoding="utf-8"
-            )
-            logger.info(f"Wrote meta for {ipa.name}: {meta_file}")
 
-        meta.setdefault("name", ipa.stem)
-        meta.setdefault("bundle_id", "/skip")
-        meta.setdefault("version", "/skip")
-        meta.setdefault("icon", "/skip")
-        meta["url"] = f"{server_url}/repo/packages/{ipa.name}" if server_url else f"/repo/packages/{ipa.name}"
-        entries.append(meta)
+        # формируем Ksign-совместимую структуру
+        entry = {
+            "name": meta.get("name", ipa.stem),
+            "bundle_id": meta.get("bundle_id", "/skip"),
+            "version": meta.get("version", "1.0"),
+            "min_ios": meta.get("min_ios", "/skip"),
+            "desc": meta.get("desc", ""),
+            "icon": meta.get("icon", "/skip"),
+            "url": f"{server_url}/repo/packages/{ipa.name}" if server_url else f"/repo/packages/{ipa.name}"
+        }
+        entries.append(entry)
+
+        # обновляем/создаём .json рядом с ipa
+        meta_file.write_text(json.dumps(entry, indent=4, ensure_ascii=False), encoding="utf-8")
 
     index_file.write_text(json.dumps(entries, indent=4, ensure_ascii=False), encoding="utf-8")
-    logger.info(f"index.json generated ({len(entries)} entries)")
-    await message.answer(f"index.json обновлён ({len(entries)} apps)\n{server_url}/repo/index.json")
+    logger.info(f"Ksign index.json generated ({len(entries)} entries)")
+
+    await message.answer(
+        f"index.json обновлён ({len(entries)} apps)\n{server_url}/repo/index.json"
+    )
 
 
 # -----------------------------
