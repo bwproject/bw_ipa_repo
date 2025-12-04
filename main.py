@@ -7,9 +7,8 @@ import os
 import logging
 from dotenv import load_dotenv
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import FileResponse
-from fastapi import UploadFile, File
 from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
@@ -58,7 +57,7 @@ async def get_image(file_name: str):
         return FileResponse(p)
     logger.warning(f"Image not found: {file_name}")
     return {"error": "file not found"}, 404
-    
+
 @app.post("/upload")
 async def upload_ipa(file: UploadFile = File(...)):
     filename = file.filename
@@ -69,7 +68,7 @@ async def upload_ipa(file: UploadFile = File(...)):
             f.write(chunk)
 
     return {"status": "ok", "saved": filename}
-    
+
 app.mount("/webapp", StaticFiles(directory="webapp"), name="webapp")
 
 # import bot start after app defined to avoid circular imports
@@ -86,9 +85,4 @@ async def start_services():
 
 if __name__ == "__main__":
     logger.info("Starting main.py")
-    try:
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(start_services())
-    except RuntimeError:
-        # fallback if event loop is already running
-        asyncio.run(start_services())
+    asyncio.run(start_services())
