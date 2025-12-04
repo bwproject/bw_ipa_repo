@@ -76,17 +76,17 @@ uploadBtn.addEventListener("click", async () => {
             progressBar.style.width = percent + "%";
             statusDiv.innerText = `🔄 Uploading: ${percent}%`;
 
-            // === скорость ===
+            // === SPEED CALC ===
             const now = Date.now();
-            const diffTime = (now - lastTime) / 1000; // сек
-            const diffLoaded = event.loaded - lastLoaded; // байты
+            const diffTime = (now - lastTime) / 1000;
+            const diffLoaded = event.loaded - lastLoaded;
 
-            if (diffTime > 0.3) {
-                const speed = diffLoaded / diffTime; // bytes/sec
+            if (diffTime >= 0.3) {
+                const speed = diffLoaded / diffTime;
                 const speedMB = (speed / (1024 * 1024)).toFixed(2);
 
                 const remaining = event.total - event.loaded;
-                const eta = remaining / speed; // sec
+                const eta = remaining / speed;
                 const etaStr = eta > 1 ? `${eta.toFixed(1)}s` : "<1s";
 
                 speedInfo.innerText = `⚡ ${speedMB} MB/s — ETA: ${etaStr}`;
@@ -103,7 +103,7 @@ uploadBtn.addEventListener("click", async () => {
             progressBar.style.width = "100%";
             speedInfo.innerText = "✅ Completed";
 
-            statusDiv.innerText = `✅ Uploaded: ${resp.saved}`;
+            statusDiv.innerText = `🎉 Uploaded: ${resp.saved}`;
             tg.MainButton.setText("Done!");
         } else {
             statusDiv.innerText = `❌ Upload error: ${xhr.status}`;
