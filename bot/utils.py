@@ -31,10 +31,10 @@ def extract_ipa_metadata(ipa_path: Path) -> dict:
                 with zf.open(info_plist_path) as plist_file:
                     plist_data = plistlib.load(plist_file)
                     meta["name"] = plist_data.get("CFBundleDisplayName") or plist_data.get("CFBundleName") or ipa_path.stem
-                    meta["bundle_id"] = plist_data.get("CFBundleIdentifier", "/skip")
+                    meta["bundleIdentifier"] = plist_data.get("CFBundleIdentifier", ipa_path.stem)
                     meta["version"] = plist_data.get("CFBundleShortVersionString", "1.0")
-                    meta["min_ios"] = plist_data.get("MinimumOSVersion", "/skip")
-                    meta["desc"] = plist_data.get("CFBundleGetInfoString", "")
+                    meta["min_ios"] = plist_data.get("MinimumOSVersion", "16.0")
+                    meta["localizedDescription"] = plist_data.get("CFBundleGetInfoString", "")
 
             # Извлекаем иконку
             if icon_path:
@@ -42,17 +42,31 @@ def extract_ipa_metadata(ipa_path: Path) -> dict:
                 target_icon = IMAGES / icon_filename
                 with zf.open(icon_path) as icon_file, open(target_icon, "wb") as f_out:
                     shutil.copyfileobj(icon_file, f_out)
-                meta["icon"] = f"/repo/images/{icon_filename}"
+                meta["iconURL"] = f"/repo/images/{icon_filename}"
             else:
-                meta["icon"] = "/skip"
+                meta["iconURL"] = None
+
+            # Размер файла
+            meta["size"] = get_file_size(ipa_path)
 
     except Exception as e:
         logger.exception(f"Failed to extract metadata from {ipa_path}: {e}")
         meta.setdefault("name", ipa_path.stem)
-        meta.setdefault("bundle_id", "/skip")
+        meta.setdefault("bundleIdentifier", ipa_path.stem)
         meta.setdefault("version", "1.0")
-        meta.setdefault("icon", "/skip")
-        meta.setdefault("min_ios", "/skip")
-        meta.setdefault("desc", "")
+        meta.setdefault("iconURL", None)
+        meta.setdefault("min_ios", "16.0")
+        meta.setdefault("localizedDescription", "")
+        meta["size"] = get_file_size(ipa_path)
 
     return meta
+
+def get_file_size(path: Path) -> int:
+    """
+    Возвращает размер файла в байтах.
+    """
+    try:
+        return path.stat().st_size
+    except Exception as e:
+        logger.warning(f"Failed to get file size for {path}: {e}")
+        return 0
