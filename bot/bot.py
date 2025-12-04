@@ -1,3 +1,5 @@
+# bot/bot.py
+
 import logging
 import os
 from dotenv import load_dotenv
