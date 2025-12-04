@@ -1,45 +1,58 @@
+# bot/utils.py
+
 import zipfile
 import plistlib
 from pathlib import Path
 import shutil
-from typing import Dict, Any
+import logging
+
+logger = logging.getLogger("bot.utils")
 
 IMAGES = Path("repo/images")
 IMAGES.mkdir(parents=True, exist_ok=True)
 
-def extract_ipa_metadata(ipa_path: Path) -> Dict[str, Any]:
-    """Extract name, bundle_id, version and save first icon as <bundle>.png if possible."""
-    if not ipa_path.exists():
-        return {}
+def extract_ipa_metadata(ipa_path: Path) -> dict:
+    """
+    Извлекает метаданные из .ipa файла для Ksign.
+    """
+    meta = {}
+    try:
+        with zipfile.ZipFile(ipa_path, "r") as zf:
+            # Находим Info.plist внутри Payload/*.app/
+            info_plist_path = None
+            icon_path = None
+            for f in zf.namelist():
+                if f.endswith("Info.plist") and f.startswith("Payload/"):
+                    info_plist_path = f
+                if f.endswith(".png") and "AppIcon" in f:
+                    icon_path = f
 
-    with zipfile.ZipFile(ipa_path, "r") as z:
-        plist_path = None
-        app_folder = None
-        for p in z.namelist():
-            if p.startswith("Payload/") and p.endswith("Info.plist"):
-                plist_path = p
-                app_folder = "/".join(p.split("/")[:-1]) + "/"
-                break
-        if not plist_path:
-            return {}
+            if info_plist_path:
+                with zf.open(info_plist_path) as plist_file:
+                    plist_data = plistlib.load(plist_file)
+                    meta["name"] = plist_data.get("CFBundleDisplayName") or plist_data.get("CFBundleName") or ipa_path.stem
+                    meta["bundle_id"] = plist_data.get("CFBundleIdentifier", "/skip")
+                    meta["version"] = plist_data.get("CFBundleShortVersionString", "1.0")
+                    meta["min_ios"] = plist_data.get("MinimumOSVersion", "/skip")
+                    meta["desc"] = plist_data.get("CFBundleGetInfoString", "")
 
-        with z.open(plist_path) as f:
-            plist = plistlib.load(f)
+            # Извлекаем иконку
+            if icon_path:
+                icon_filename = f"{ipa_path.stem}.png"
+                target_icon = IMAGES / icon_filename
+                with zf.open(icon_path) as icon_file, open(target_icon, "wb") as f_out:
+                    shutil.copyfileobj(icon_file, f_out)
+                meta["icon"] = f"/repo/images/{icon_filename}"
+            else:
+                meta["icon"] = "/skip"
 
-        name = plist.get("CFBundleDisplayName") or plist.get("CFBundleName")
-        bundle = plist.get("CFBundleIdentifier")
-        version = plist.get("CFBundleShortVersionString")
-        icons = plist.get("CFBundleIconFiles", []) or []
+    except Exception as e:
+        logger.exception(f"Failed to extract metadata from {ipa_path}: {e}")
+        meta.setdefault("name", ipa_path.stem)
+        meta.setdefault("bundle_id", "/skip")
+        meta.setdefault("version", "1.0")
+        meta.setdefault("icon", "/skip")
+        meta.setdefault("min_ios", "/skip")
+        meta.setdefault("desc", "")
 
-        saved_icon = None
-        if icons and bundle and app_folder:
-            icon_base = icons[0]
-            for ext in (".png", ".jpg", ".jpeg"):
-                candidate = app_folder + icon_base + ext
-                if candidate in z.namelist():
-                    saved_icon = f"{bundle}.png"
-                    with z.open(candidate) as src, open(IMAGES / saved_icon, "wb") as dst:
-                        shutil.copyfileobj(src, dst)
-                    break
-
-        return {"name": name, "bundle_id": bundle, "version": version, "icon": saved_icon}
+    return meta
