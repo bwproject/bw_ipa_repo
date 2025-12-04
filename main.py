@@ -34,18 +34,21 @@ IMAGES.mkdir(parents=True, exist_ok=True)
 # FastAPI app
 app = FastAPI(title="bw_ipa_repo")
 
-# ======== Маршрут для корня / ========
+# ======== Корневой маршрут / ========
 @app.get("/", response_class=HTMLResponse)
 async def root_index():
     index_file = BASE / "index.json"
     if not index_file.exists():
         return HTMLResponse("<h1>index.json not found</h1>", status_code=404)
 
-    with open(index_file, "r", encoding="utf-8") as f:
-        try:
+    try:
+        with open(index_file, "r", encoding="utf-8") as f:
             apps = json.load(f)
-        except json.JSONDecodeError:
-            return HTMLResponse("<h1>Invalid index.json</h1>", status_code=500)
+            if not isinstance(apps, list):
+                raise ValueError("index.json should contain a list")
+    except Exception as e:
+        logger.exception("Error reading index.json")
+        return HTMLResponse(f"<h1>Failed to read index.json</h1><pre>{e}</pre>", status_code=500)
 
     if not INDEX_HTML.exists():
         return HTMLResponse("<h1>HTML template not found</h1>", status_code=500)
@@ -77,7 +80,7 @@ async def root_index():
         '''
 
     html_content = html_template.replace("{{APPS_LIST}}", apps_html)
-    return HTMLResponse(html_content)
+    return HTMLResponse(content=html_content, status_code=200)
 
 # ======== Существующие маршруты /repo ========
 @app.get("/repo/index.json")
