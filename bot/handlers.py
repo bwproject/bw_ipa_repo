@@ -8,8 +8,8 @@ from aiogram import types, Dispatcher
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiogram.exceptions import TelegramBadRequest
-from bot.handlers_packages import register_packages_handlers
 
+from bot.handlers_packages import register_packages_handlers
 from bot.utils import extract_ipa_metadata, get_file_size
 
 logger = logging.getLogger("bot.handlers")
@@ -41,33 +41,30 @@ async def _download_via_telegram_url(bot, file_id: str, dest: Path):
 
 
 # ==============================
-#  Обработка документа (.ipa)
+#  Правка iconURL
 # ==============================
 async def fix_icon_url(meta: dict, ipa_name: str, server_url: str):
-    """
-    Приводит iconURL к формату:
-    https://server/repo/images/icon.png
-    """
-
     icon_url = meta.get("iconURL", "").strip()
 
-    # Если указали полный URL — не трогаем
+    # Полный URL оставляем
     if icon_url.startswith("http://") or icon_url.startswith("https://"):
         return icon_url
 
-    # Если иконка внутри .ipa не извлеклась → пробуем repo/images/<ipa>.png
+    # Если пусто — возможно PNG уже извлечён
     guessed_png = IMAGES / (Path(ipa_name).stem + ".png")
     if icon_url == "" and guessed_png.exists():
         return f"{server_url}/repo/images/{guessed_png.name}"
 
-    # Если iconURL начинается с /repo/images/...
+    # Если начинается с /repo/images/... → добавляем домен
     if icon_url.startswith("/"):
         return f"{server_url}{icon_url}"
 
-    # Если пусто и PNG нет
     return ""
 
 
+# ==============================
+#  Обработка документа (.ipa)
+# ==============================
 async def handle_document(message: types.Message, bot):
     doc = message.document
     if not doc or not doc.file_name.lower().endswith(".ipa"):
@@ -85,13 +82,11 @@ async def handle_document(message: types.Message, bot):
         await _download_via_telegram_url(bot, doc.file_id, target)
         logger.info(f"Saved IPA: {target}")
 
-        # --- Генерация .json для каждого IPA ---
+        # --- Создаём JSON ---
         meta_file = target.with_suffix(".json")
 
         if not meta_file.exists():
             meta = extract_ipa_metadata(target)
-
-            # Правильный iconURL
             fixed_icon = await fix_icon_url(meta, target.name, server_url)
 
             meta_to_save = {
@@ -134,7 +129,7 @@ async def handle_document(message: types.Message, bot):
             )
             await message.answer(
                 "⚠️ Файл слишком большой для загрузки через Telegram.\n"
-                "Нажмите кнопку ниже, чтобы открыть WebApp и загрузить файл:",
+                "Нажмите кнопку ниже, чтобы открыть WebApp:",
                 reply_markup=kb
             )
         else:
@@ -147,7 +142,7 @@ async def handle_document(message: types.Message, bot):
 
 
 # ==============================
-#  Команда /repo — генерация index.json
+#  /repo — генерация index.json
 # ==============================
 async def cmd_repo(message: types.Message):
     import os
@@ -198,12 +193,9 @@ async def cmd_repo(message: types.Message):
                 ]
             }
 
-        # --- Правим iconURL ---
         app_meta["iconURL"] = await fix_icon_url(app_meta, ipa.name, server_url)
-
         repo_data["apps"].append(app_meta)
 
-    # Сохраняем index.json
     index_file.write_text(json.dumps(repo_data, indent=4, ensure_ascii=False), encoding="utf-8")
 
     await message.answer(
@@ -213,7 +205,7 @@ async def cmd_repo(message: types.Message):
 
 
 # ==============================
-#  /start & /upload
+#  /start
 # ==============================
 async def cmd_start(message: types.Message):
     await message.answer(
@@ -225,6 +217,9 @@ async def cmd_start(message: types.Message):
     )
 
 
+# ==============================
+#  /upload
+# ==============================
 async def cmd_upload(message: types.Message):
     import os
     server = os.getenv("SERVER_URL", "").rstrip("/")
@@ -239,17 +234,19 @@ async def cmd_upload(message: types.Message):
 
 
 # ==============================
-#  Регистрация хэндлеров
+#  Регистрация всех хэндлеров
 # ==============================
 def register_handlers(dp: Dispatcher):
+    # IPA загрузка
     dp.message.register(
         handle_document,
         lambda m: m.document is not None and m.document.file_name.lower().endswith(".ipa")
     )
+
+    # Основные команды
     dp.message.register(cmd_repo, Command(commands=["repo"]))
     dp.message.register(cmd_start, Command(commands=["start"]))
     dp.message.register(cmd_upload, Command(commands=["upload"]))
 
-def register_handlers(dp: Dispatcher):
-    ...
+    # Пакеты (update, edit, list)
     register_packages_handlers(dp)
