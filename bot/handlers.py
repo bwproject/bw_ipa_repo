@@ -54,11 +54,11 @@ async def handle_document(message: types.Message, bot):
     await message.answer("🔄 Пытаюсь скачать файл через Telegram…")
 
     try:
-        # --- Пытаемся скачать через Telegram API ---
+        # --- Скачиваем через Telegram API ---
         await _download_via_telegram_url(bot, doc.file_id, target)
         logger.info(f"Saved IPA: {target}")
 
-        # Meta
+        # Извлекаем метаданные IPA
         meta = extract_ipa_metadata(target)
         meta.setdefault("name", target.stem)
         meta.setdefault("bundle_id", "/skip")
@@ -83,8 +83,8 @@ async def handle_document(message: types.Message, bot):
         await message.answer(f"Файл {doc.file_name} сохранён через Telegram API ✅")
 
     except TelegramBadRequest as e:
-        # --- Файл слишком большой ---
         if "file is too big" in str(e).lower():
+            # --- Файл слишком большой ---
             server = os.getenv("SERVER_URL", "").rstrip("/")
             upload_url = f"{server}/upload"
 
@@ -92,7 +92,7 @@ async def handle_document(message: types.Message, bot):
 
             await message.answer(
                 "⚠️ Файл слишком большой для загрузки через Telegram.\n\n"
-                f"➡️ Загрузите его вручную сюда:\n{upload_url}"
+                f"➡️ Загрузите его вручную через WebApp:\n/upload"
             )
         else:
             logger.exception("TelegramBadRequest during download")
@@ -155,8 +155,32 @@ async def cmd_start(message: types.Message):
         "👋 bw_ipa_repo bot\n\n"
         "• Отправь мне файл .ipa — я сохраню его в репозиторий.\n"
         "• (опционально) добавь рядом файл .json с метаданными.\n"
-        "• Командой /repo собери новый index.json"
+        "• Командой /repo собери новый index.json.\n"
+        "• Командой /upload открой WebApp для загрузки больших файлов."
     )
+
+
+# -----------------------------
+# Команда /upload → Telegram WebApp
+# -----------------------------
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+
+async def cmd_upload(message: types.Message):
+    server = os.getenv("SERVER_URL", "").rstrip("/")
+    url = f"{server}/webapp/"
+
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📤 Upload IPA (WebApp)",
+                    web_app=WebAppInfo(url=url)
+                )
+            ]
+        ]
+    )
+
+    await message.answer("Открываю WebApp для загрузки IPA:", reply_markup=kb)
 
 
 # -----------------------------
@@ -169,3 +193,4 @@ def register_handlers(dp: Dispatcher):
     )
     dp.message.register(cmd_repo, Command(commands=["repo"]))
     dp.message.register(cmd_start, Command(commands=["start"]))
+    dp.message.register(cmd_upload, Command(commands=["upload"]))
