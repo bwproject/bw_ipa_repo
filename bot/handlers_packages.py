@@ -17,47 +17,45 @@ BASE = Path("repo")
 PACKAGES = BASE / "packages"
 
 
-# ============================
-# СТАДИИ FSM для /packages_edit
-# ============================
+# ======================================================
+# FSM для редактирования JSON
+# ======================================================
 class EditStates(StatesGroup):
-    selecting_line = State()
     editing = State()
 
 
-# ============================
-# Утилита для починки iconURL
-# ============================
+# ======================================================
+# Исправленный fix_icon_url
+# ======================================================
 async def fix_icon_url(meta: dict, ipa_name: str, server_url: str):
     icon_url = meta.get("iconURL", "").strip()
 
-    # уже URL — не трогаем
+    # Полный URL – оставляем
     if icon_url.startswith("http://") or icon_url.startswith("https://"):
         return icon_url
 
-    # если пусто — ищем PNG
-    from pathlib import Path
+    # Если пусто – ищем PNG в repo/images
     png_path = Path("repo/images") / (Path(ipa_name).stem + ".png")
-    if icon_url == "" and png_path.exists():
+    if (not icon_url) and png_path.exists():
         return f"{server_url}/repo/images/{png_path.name}"
 
-    # если начинается с /
+    # Если начинается с /repo/…
     if icon_url.startswith("/"):
         return f"{server_url}{icon_url}"
 
     return ""
 
 
-# =======================================================
-#  /packages_update — пересоздание всех JSON
-# =======================================================
+# ======================================================
+# /packages_update — Перегнать все JSON
+# ======================================================
 async def cmd_packages_update(message: types.Message):
     import os
     server_url = os.getenv("SERVER_URL", "").rstrip("/")
 
     count = 0
-    for ipa in PACKAGES.glob("*.ipa"):
 
+    for ipa in PACKAGES.glob("*.ipa"):
         meta = extract_ipa_metadata(ipa)
         fixed_icon = await fix_icon_url(meta, ipa.name, server_url)
 
@@ -88,34 +86,34 @@ async def cmd_packages_update(message: types.Message):
         meta_file.write_text(json.dumps(new_json, indent=4, ensure_ascii=False), encoding="utf-8")
         count += 1
 
-    await message.answer(f"♻️ Обновлено JSON файлов: {count}")
+    await message.answer(f"♻ Обновлено JSON файлов: <b>{count}</b>", parse_mode="html")
 
 
-# =======================================================
-#  /packages_edit — выбор JSON
-# =======================================================
-async def cmd_packages_edit(message: types.Message, state: FSMContext):
+# ======================================================
+# /packages_list — вывод списка json
+# ======================================================
+async def cmd_packages_list(message: types.Message):
     files = list(PACKAGES.glob("*.json"))
-
     if not files:
         return await message.answer("❌ В репозитории нет .json файлов")
 
-    msg = "📝 Доступные JSON:\n\n"
+    msg = "📦 Доступные JSON:\n\n"
     for f in files:
         msg += f"• <b>{f.stem}</b>\n"
 
-    msg += "\nИспользуй:\n<code>/packages_edit Name</code>"
+    msg += "\nДля редактирования: <code>/packages_edit имя</code>"
 
     await message.answer(msg, parse_mode="html")
 
 
-# =======================================================
-#  /packages_edit <name> — загрузка файла
-# =======================================================
+# ======================================================
+# /packages_edit NAME — открыть файл
+# ======================================================
 async def cmd_packages_edit_name(message: types.Message, state: FSMContext):
     parts = message.text.split(maxsplit=1)
+
     if len(parts) < 2:
-        return await message.answer("Используй: /packages_edit <name>")
+        return await message.answer("Используй:\n<code>/packages_edit имя</code>", parse_mode="html")
 
     name = parts[1].strip()
     target = PACKAGES / f"{name}.json"
@@ -125,24 +123,40 @@ async def cmd_packages_edit_name(message: types.Message, state: FSMContext):
 
     data = json.loads(target.read_text(encoding="utf-8"))
 
-    # сохраняем путь и данные в FSM
     await state.update_data(file_path=str(target), json_data=data)
 
     formatted = json.dumps(data, indent=4, ensure_ascii=False)
 
     await message.answer(
-        f"Файл: <b>{name}.json</b>\n\n"
+        f"📝 Редактирование: <b>{name}.json</b>\n\n"
         f"<pre>{formatted}</pre>\n\n"
-        f"Введите строку в формате:\n<code>ключ: значение</code>",
+        f"Введи строку в формате:\n"
+        f"<code>ключ: значение</code>\n"
+        f"Поддерживаются вложенные ключи:\n"
+        f"<code>versions.0.version: 2.0</code>",
         parse_mode="html"
     )
 
     await state.set_state(EditStates.editing)
 
 
-# =======================================================
-#  Редактирование строки JSON
-# =======================================================
+# ======================================================
+# Редактирование строки
+# ======================================================
+def set_nested_value(data, dotted_key, value):
+    keys = dotted_key.split(".")
+    d = data
+    for k in keys[:-1]:
+        if k.isdigit():
+            k = int(k)
+        d = d[k]
+    last = keys[-1]
+    if last.isdigit():
+        last = int(last)
+    d[last] = value
+    return data
+
+
 async def process_edit_line(message: types.Message, state: FSMContext):
     text = message.text
 
@@ -155,25 +169,23 @@ async def process_edit_line(message: types.Message, state: FSMContext):
     json_data = data["json_data"]
     file_path = Path(data["file_path"])
 
-    # простое редактирование 1 уровня
-    if key not in json_data:
-        return await message.answer("❌ Ключ не найден в JSON")
-
-    json_data[key] = value
+    try:
+        set_nested_value(json_data, key, value)
+    except Exception:
+        return await message.answer("❌ Ошибка: ключ не найден или неверный путь")
 
     file_path.write_text(json.dumps(json_data, indent=4, ensure_ascii=False), encoding="utf-8")
-
     await state.update_data(json_data=json_data)
 
-    await message.answer("✔️ Обновлено!\nМожешь вводить новую строку.")
+    await message.answer("✔ Обновлено! Введи следующую строку.")
 
 
-# ===========================
-# РЕГИСТРАЦИЯ
-# ===========================
+# ======================================================
+# Регистрация
+# ======================================================
 def register_packages_handlers(dp: Dispatcher):
-    dp.message.register(cmd_packages_update, Command(commands=["packages_update"]))
-    dp.message.register(cmd_packages_edit, Command(commands=["packages_list", "packages_edit"]))
-    dp.message.register(cmd_packages_edit_name, Command(commands=["packages_redit", "packages_edit_name"]))
+    dp.message.register(cmd_packages_update, Command("packages_update"))
+    dp.message.register(cmd_packages_list, Command("packages_list"))
+    dp.message.register(cmd_packages_edit_name, Command("packages_edit"))
 
     dp.message.register(process_edit_line, EditStates.editing)
