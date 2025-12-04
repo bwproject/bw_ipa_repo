@@ -1,9 +1,14 @@
 # bot/handlers.py
 
+# handlers.py
+
 import json
 import logging
 import os
 from pathlib import Path
+import zipfile
+from PIL import Image
+from io import BytesIO
 
 import aiohttp
 from aiogram import types, Dispatcher
@@ -11,7 +16,7 @@ from aiogram.filters import Command
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
-from bot.utils import extract_ipa_metadata  # обновлённая версия
+from bot.utils import extract_ipa_metadata
 
 logger = logging.getLogger("bot.handlers")
 
@@ -41,6 +46,37 @@ async def _download_via_telegram_url(bot, file_id: str, dest: Path):
 
 
 # -----------------------------
+# Извлечение иконки из IPA
+# -----------------------------
+def extract_icon(ipa_path: Path) -> str | None:
+    """Извлекает первую PNG иконку из IPA и сохраняет её в /repo/images"""
+    try:
+        with zipfile.ZipFile(ipa_path, 'r') as z:
+            # ищем все .png файлы в Payload/*.app/
+            png_files = [f for f in z.namelist() if f.endswith(".png") and "AppIcon" in f]
+            if not png_files:
+                png_files = [f for f in z.namelist() if f.endswith(".png")]
+            if not png_files:
+                return None
+
+            icon_file = png_files[0]
+            icon_data = z.read(icon_file)
+
+            # сохраняем иконку
+            ext = Path(icon_file).suffix
+            icon_name = f"{ipa_path.stem}{ext}"
+            icon_path = IMAGES / icon_name
+
+            with open(icon_path, "wb") as f:
+                f.write(icon_data)
+
+            return icon_name
+    except Exception as e:
+        logger.warning(f"Failed to extract icon from {ipa_path}: {e}")
+        return None
+
+
+# -----------------------------
 # Обработка документа (.ipa)
 # -----------------------------
 async def handle_document(message: types.Message, bot):
@@ -54,17 +90,28 @@ async def handle_document(message: types.Message, bot):
     await message.answer("🔄 Пытаюсь скачать файл через Telegram…")
 
     try:
-        # --- Скачиваем через Telegram API ---
         await _download_via_telegram_url(bot, doc.file_id, target)
         logger.info(f"Saved IPA: {target}")
 
         # metadata
         meta = extract_ipa_metadata(target)
-        meta_file = target.with_suffix(".json")
 
+        # извлекаем иконку
+        icon_name = extract_icon(target)
+        if icon_name:
+            meta["icon"] = f"/repo/images/{icon_name}"
+
+        meta_file = target.with_suffix(".json")
         if not meta_file.exists():
+            # сохраняем только доступные поля
+            meta_to_save = {}
+            for key in ["name", "bundle_id", "version", "min_ios", "desc", "icon"]:
+                value = meta.get(key)
+                if value:
+                    meta_to_save[key] = value
+
             meta_file.write_text(
-                json.dumps(meta, indent=4, ensure_ascii=False),
+                json.dumps(meta_to_save, indent=4, ensure_ascii=False),
                 encoding="utf-8"
             )
             logger.info(f"Wrote meta file: {meta_file}")
@@ -75,9 +122,6 @@ async def handle_document(message: types.Message, bot):
         if "file is too big" in str(e).lower():
             server = os.getenv("SERVER_URL", "").rstrip("/")
             upload_url = f"{server}/webapp"
-
-            logger.warning("File too big for Telegram API — fallback to WebApp upload")
-
             kb = InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
@@ -89,7 +133,7 @@ async def handle_document(message: types.Message, bot):
                 ]
             )
             await message.answer(
-                "⚠️ Файл слишком большой для загрузки через Telegram.\n"
+                "⚠️ Файл слишком большой для Telegram.\n"
                 "Нажмите кнопку ниже, чтобы открыть WebApp и загрузить файл:",
                 reply_markup=kb
             )
@@ -103,7 +147,7 @@ async def handle_document(message: types.Message, bot):
 
 
 # -----------------------------
-# Команда /repo — генерация Ksign-совместимого index.json
+# Команда /repo — генерация Ksign/AltStore JSON
 # -----------------------------
 async def cmd_repo(message: types.Message):
     index_file = BASE / "index.json"
@@ -111,35 +155,47 @@ async def cmd_repo(message: types.Message):
     entries = []
 
     for ipa in PACKAGES.glob("*.ipa"):
-        # извлекаем метаданные из .ipa, если .json нет или неполный
         meta_file = ipa.with_suffix(".json")
         meta = {}
+
         if meta_file.exists():
             try:
                 meta = json.loads(meta_file.read_text(encoding="utf-8"))
             except Exception as e:
                 logger.warning(f"Bad meta {meta_file}: {e}")
-                meta = extract_ipa_metadata(ipa)
-        else:
-            meta = extract_ipa_metadata(ipa)
+                meta = {}
 
-        # формируем Ksign-совместимую структуру
-        entry = {
-            "name": meta.get("name", ipa.stem),
-            "bundle_id": meta.get("bundle_id", "/skip"),
-            "version": meta.get("version", "1.0"),
-            "min_ios": meta.get("min_ios", "/skip"),
-            "desc": meta.get("desc", ""),
-            "icon": meta.get("icon", "/skip"),
-            "url": f"{server_url}/repo/packages/{ipa.name}" if server_url else f"/repo/packages/{ipa.name}"
-        }
-        entries.append(entry)
+        # если каких-то полей нет — извлекаем из IPA
+        missing_keys = [k for k in ["name", "bundle_id", "version", "min_ios", "desc", "icon"] if k not in meta]
+        if missing_keys:
+            ipa_meta = extract_ipa_metadata(ipa)
+            for key in missing_keys:
+                if ipa_meta.get(key):
+                    meta[key] = ipa_meta[key]
 
-        # обновляем/создаём .json рядом с ipa
-        meta_file.write_text(json.dumps(entry, indent=4, ensure_ascii=False), encoding="utf-8")
+            # извлекаем иконку если нет
+            if "icon" not in meta or not meta["icon"]:
+                icon_name = extract_icon(ipa)
+                if icon_name:
+                    meta["icon"] = f"/repo/images/{icon_name}"
 
-    index_file.write_text(json.dumps(entries, indent=4, ensure_ascii=False), encoding="utf-8")
-    logger.info(f"Ksign index.json generated ({len(entries)} entries)")
+            # обновляем JSON
+            meta_file.write_text(
+                json.dumps(meta, indent=4, ensure_ascii=False),
+                encoding="utf-8"
+            )
+
+        # URL на IPA
+        meta["url"] = f"{server_url}/repo/packages/{ipa.name}" if server_url else f"/repo/packages/{ipa.name}"
+
+        entries.append(meta)
+
+    # сохраняем единый index.json
+    index_file.write_text(
+        json.dumps(entries, indent=4, ensure_ascii=False),
+        encoding="utf-8"
+    )
+    logger.info(f"index.json generated ({len(entries)} entries)")
 
     await message.answer(
         f"index.json обновлён ({len(entries)} apps)\n{server_url}/repo/index.json"
@@ -147,21 +203,18 @@ async def cmd_repo(message: types.Message):
 
 
 # -----------------------------
-# Команда /start
+# Команды /start и /upload
 # -----------------------------
 async def cmd_start(message: types.Message):
     await message.answer(
         "👋 bw_ipa_repo bot\n\n"
-        "• Отправь мне файл .ipa — я сохраню его в репозиторий.\n"
+        "• Отправь мне файл .ipa — я сохраню его.\n"
         "• (опционально) добавь рядом файл .json с метаданными.\n"
         "• Командой /repo собери новый index.json\n"
         "• /upload — открыть WebApp для загрузки больших файлов"
     )
 
 
-# -----------------------------
-# Команда /upload — открыть WebApp
-# -----------------------------
 async def cmd_upload(message: types.Message):
     server = os.getenv("SERVER_URL", "").rstrip("/")
     upload_url = f"{server}/webapp"
