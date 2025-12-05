@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 from pathlib import Path
 
 from aiogram import types, Dispatcher
@@ -14,22 +15,60 @@ from bot.utils import extract_ipa_metadata, get_file_size
 
 logger = logging.getLogger("bot.handlers")
 
-# Папки
+# ==============================
+# Директории
+# ==============================
 BASE = Path("repo")
 PACKAGES = BASE / "packages"
 IMAGES = BASE / "images"
 PACKAGES.mkdir(parents=True, exist_ok=True)
 IMAGES.mkdir(parents=True, exist_ok=True)
 
+# ==============================
+# users.json (автосоздание)
+# ==============================
+USERS_FILE = Path("users.json")
+
+if not USERS_FILE.exists():
+    USERS_FILE.write_text(json.dumps({"users": []}, indent=4), encoding="utf-8")
+
+
+def load_users() -> dict:
+    try:
+        return json.loads(USERS_FILE.read_text(encoding="utf-8"))
+    except:
+        USERS_FILE.write_text(json.dumps({"users": []}, indent=4), encoding="utf-8")
+        return {"users": []}
+
+
+def save_users(data: dict):
+    USERS_FILE.write_text(json.dumps(data, indent=4, ensure_ascii=False), encoding="utf-8")
+
 
 # ==============================
-# Скачивание через Telegram API
+# Проверка доступа
+# ==============================
+async def check_access(message: types.Message) -> bool:
+    admin_id = int(os.getenv("ADMIN_ID", "0"))
+    users = load_users().get("users", [])
+
+    if message.from_user.id == admin_id:
+        return True
+    if message.from_user.id in users:
+        return True
+
+    await message.answer("❌ У вас нет доступа к боту.")
+    return False
+
+
+# ==============================
+# Telegram File Downloader
 # ==============================
 async def _download_via_telegram_url(bot, file_id: str, dest: Path):
     file_info = await bot.get_file(file_id)
     file_url = f"https://api.telegram.org/file/bot{bot.token}/{file_info.file_path}"
 
-    logger.info(f"Downloading from Telegram URL: {file_url}")
+    logger.info(f"Downloading via Telegram URL: {file_url}")
 
     import aiohttp
     async with aiohttp.ClientSession() as session:
@@ -41,7 +80,7 @@ async def _download_via_telegram_url(bot, file_id: str, dest: Path):
 
 
 # ==============================
-# Правка iconURL
+# ICON URL FIX
 # ==============================
 async def fix_icon_url(meta: dict, ipa_name: str, server_url: str):
     icon_url = meta.get("iconURL", "").strip()
@@ -60,25 +99,25 @@ async def fix_icon_url(meta: dict, ipa_name: str, server_url: str):
 
 
 # ==============================
-# Обработка документа (.ipa)
+# Обработка .ipa файлов
 # ==============================
 async def handle_document(message: types.Message, bot):
+    if not await check_access(message):
+        return
+
     doc = message.document
     if not doc or not doc.file_name.lower().endswith(".ipa"):
-        await message.answer("Пожалуйста, отправляйте только файлы .ipa")
+        await message.answer("Пожалуйста, отправьте файл .ipa")
         return
 
     target = PACKAGES / doc.file_name
-    await message.answer("🔄 Пытаюсь скачать файл через Telegram…")
+    await message.answer("📥 Скачиваю файл через Telegram…")
 
-    import os
     server_url = os.getenv("SERVER_URL", "").rstrip("/")
 
     try:
         await _download_via_telegram_url(bot, doc.file_id, target)
-        logger.info(f"Saved IPA: {target}")
 
-        # Создание JSON, если его нет
         meta_file = target.with_suffix(".json")
         if not meta_file.exists():
             meta = extract_ipa_metadata(target)
@@ -108,38 +147,35 @@ async def handle_document(message: types.Message, bot):
 
             meta_file.write_text(json.dumps(meta_to_save, indent=4, ensure_ascii=False), encoding="utf-8")
 
-        await message.answer(f"Файл {doc.file_name} сохранён через Telegram API ✅")
+        await message.answer(f"✔ Файл {doc.file_name} сохранён")
 
     except TelegramBadRequest as e:
         if "file is too big" in str(e).lower():
-            import os
-            server = os.getenv("SERVER_URL", "").rstrip("/")
-            upload_url = f"{server}/webapp"
+            upload_url = f"{server_url}/webapp"
             kb = InlineKeyboardMarkup(
                 inline_keyboard=[[InlineKeyboardButton(
-                    text="📤 Загрузить IPA через WebApp",
+                    text="📤 Загрузить через WebApp",
                     web_app=WebAppInfo(url=upload_url)
                 )]]
             )
-            await message.answer(
-                "⚠️ Файл слишком большой для загрузки через Telegram.\n"
-                "Нажмите кнопку ниже, чтобы открыть WebApp:",
-                reply_markup=kb
-            )
+
+            await message.answer("⚠️ Файл слишком большой. Используй WebApp:", reply_markup=kb)
         else:
-            logger.exception("TelegramBadRequest during download")
-            await message.answer("Ошибка Telegram API ❌")
+            logger.exception(e)
+            await message.answer("❌ Ошибка Telegram API")
 
     except Exception as e:
-        logger.exception("Failed to download file")
-        await message.answer("Ошибка при скачивании файла ❌")
+        logger.exception(e)
+        await message.answer("❌ Ошибка при скачивании файла")
 
 
 # ==============================
 # /repo — генерация index.json
 # ==============================
 async def cmd_repo(message: types.Message):
-    import os
+    if not await check_access(message):
+        return
+
     server_url = os.getenv("SERVER_URL", "").rstrip("/")
     index_file = BASE / "index.json"
 
@@ -160,48 +196,37 @@ async def cmd_repo(message: types.Message):
         if meta_file.exists():
             try:
                 app_meta = json.loads(meta_file.read_text(encoding="utf-8"))
-            except Exception as e:
-                logger.warning(f"Bad meta {meta_file}: {e}")
+            except:
                 continue
         else:
             meta = extract_ipa_metadata(ipa)
             app_meta = {
-                "name": meta.get("name") or ipa.stem,
-                "bundleIdentifier": meta.get("bundleIdentifier") or f"com.projectbw.{ipa.stem.lower()}",
-                "developerName": meta.get("developerName") or "Unknown",
+                "name": ipa.stem,
+                "bundleIdentifier": f"com.projectbw.{ipa.stem.lower()}",
+                "developerName": "Unknown",
                 "iconURL": "",
-                "localizedDescription": meta.get("localizedDescription") or "",
-                "subtitle": meta.get("subtitle") or "",
-                "tintColor": meta.get("tintColor") or "3c94fc",
-                "category": meta.get("category") or "utilities",
+                "localizedDescription": "",
+                "subtitle": "",
+                "tintColor": "3c94fc",
+                "category": "utilities",
                 "versions": [
                     {
                         "downloadURL": f"{server_url}/repo/packages/{ipa.name}",
                         "size": get_file_size(ipa),
-                        "version": meta.get("version") or "1.0",
+                        "version": "1.0",
                         "buildVersion": "1",
                         "date": "",
-                        "localizedDescription": meta.get("localizedDescription") or "",
-                        "minOSVersion": meta.get("min_ios") or "16.0"
+                        "localizedDescription": "",
+                        "minOSVersion": "16.0"
                     }
                 ]
             }
-
-        # Обновляем name, bundleIdentifier и версию из JSON (если редактировалось)
-        app_meta["name"] = app_meta.get("name", ipa.stem)
-        app_meta["bundleIdentifier"] = app_meta.get("bundleIdentifier", f"com.projectbw.{ipa.stem.lower()}")
-        if "versions" in app_meta and len(app_meta["versions"]) > 0:
-            app_meta["versions"][0]["version"] = app_meta["versions"][0].get("version", "1.0")
 
         app_meta["iconURL"] = await fix_icon_url(app_meta, ipa.name, server_url)
         repo_data["apps"].append(app_meta)
 
     index_file.write_text(json.dumps(repo_data, indent=4, ensure_ascii=False), encoding="utf-8")
-
-    await message.answer(
-        f"index.json обновлён ({len(repo_data['apps'])} приложений)\n"
-        f"{server_url}/repo/index.json"
-    )
+    await message.answer(f"✔ index.json обновлён: {server_url}/repo/index.json")
 
 
 # ==============================
@@ -210,10 +235,10 @@ async def cmd_repo(message: types.Message):
 async def cmd_start(message: types.Message):
     await message.answer(
         "👋 bw_ipa_repo bot\n\n"
-        "• Отправь мне файл .ipa — я сохраню его в репозиторий.\n"
-        "• (опционально) добавь рядом .json\n"
-        "• /repo — собрать index.json\n"
-        "• /upload — открыть WebApp"
+        "• Отправь .ipa — я сохраню его в репозиторий.\n"
+        "• /repo — обновить index.json\n"
+        "• /upload — открыть WebApp\n"
+        "• /add_user USER_ID — дать доступ"
     )
 
 
@@ -221,12 +246,14 @@ async def cmd_start(message: types.Message):
 # /upload
 # ==============================
 async def cmd_upload(message: types.Message):
-    import os
+    if not await check_access(message):
+        return
+
     server = os.getenv("SERVER_URL", "").rstrip("/")
     upload_url = f"{server}/webapp"
     kb = InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(
-            text="📤 Открыть WebApp",
+            text="📤 WebApp",
             web_app=WebAppInfo(url=upload_url)
         )]]
     )
@@ -234,19 +261,48 @@ async def cmd_upload(message: types.Message):
 
 
 # ==============================
-# Регистрация всех хэндлеров
+# /add_user — добавить пользователя
+# ==============================
+async def cmd_add_user(message: types.Message):
+    admin_id = int(os.getenv("ADMIN_ID", "0"))
+
+    if message.from_user.id != admin_id:
+        return await message.answer("❌ Только админ может добавлять пользователей.")
+
+    parts = message.text.split()
+    if len(parts) != 2:
+        return await message.answer("Использование:\n/add_user USER_ID")
+
+    try:
+        user_id = int(parts[1])
+    except:
+        return await message.answer("USER_ID должно быть числом.")
+
+    data = load_users()
+    users = data.get("users", [])
+
+    if user_id in users:
+        return await message.answer("⚠️ Пользователь уже добавлен.")
+
+    users.append(user_id)
+    save_users({"users": users})
+
+    await message.answer(f"✔ Пользователь {user_id} добавлен.")
+
+
+# ==============================
+# Регистрация хэндлеров
 # ==============================
 def register_handlers(dp: Dispatcher):
-    # IPA загрузка
+
+    dp.message.register(cmd_start, Command(commands=["start"]))
+    dp.message.register(cmd_repo, Command(commands=["repo"]))
+    dp.message.register(cmd_upload, Command(commands=["upload"]))
+    dp.message.register(cmd_add_user, Command(commands=["add_user"]))
+
     dp.message.register(
         handle_document,
         lambda m: m.document is not None and m.document.file_name.lower().endswith(".ipa")
     )
 
-    # Основные команды
-    dp.message.register(cmd_repo, Command(commands=["repo"]))
-    dp.message.register(cmd_start, Command(commands=["start"]))
-    dp.message.register(cmd_upload, Command(commands=["upload"]))
-
-    # Пакеты (update, edit, list)
     register_packages_handlers(dp)
