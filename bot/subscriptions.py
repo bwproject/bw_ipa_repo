@@ -3,15 +3,14 @@
 import os
 from pathlib import Path
 from aiogram import types, Dispatcher
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import Command
-from aiogram.filters import Text as TextFilter  # исправлено
-
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from bot.access import check_access
 
 BASE = Path("repo")
 PACKAGES = BASE / "packages"
 
+# Сертификаты
 CERTS = {
     "free": os.getenv("CERT_FREE", "free_cert.mobileprovision"),
     "se": os.getenv("CERT_SE", "se_cert.mobileprovision"),
@@ -33,9 +32,10 @@ async def cmd_subscribe(message: types.Message):
         await message.answer("❌ Нет доступных приложений.")
         return
 
-    kb = InlineKeyboardMarkup()
-    for app in apps:
-        kb.add(InlineKeyboardButton(text=app, callback_data=f"sub_app:{app}"))
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=app, callback_data=f"sub_app:{app}")]
+        for app in apps
+    ])
 
     await message.answer("📱 Выберите приложение для подписки:", reply_markup=kb)
 
@@ -48,16 +48,18 @@ async def callback_app_select(query: CallbackQuery):
 
     app_name = query.data.split(":", 1)[1]
 
+    # Проверяем, что приложение реально существует
     if not (PACKAGES / f"{app_name}.ipa").exists():
         await query.message.edit_text("❌ Приложение больше не доступно.")
         return
 
-    kb = InlineKeyboardMarkup(row_width=1)
-    kb.add(
-        InlineKeyboardButton("FREE", callback_data=f"sub_cert:{app_name}:free"),
-        InlineKeyboardButton("IPHONE SE", callback_data=f"sub_cert:{app_name}:se"),
-        InlineKeyboardButton("IPHONE 13 PRO", callback_data=f"sub_cert:{app_name}:pro"),
-    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton("FREE", callback_data=f"sub_cert:{app_name}:free"),
+            InlineKeyboardButton("IPHONE SE", callback_data=f"sub_cert:{app_name}:se"),
+            InlineKeyboardButton("IPHONE 13 PRO", callback_data=f"sub_cert:{app_name}:pro")
+        ]
+    ])
 
     await query.message.edit_text(
         f"📲 Вы выбрали <b>{app_name}</b>\nВыберите сертификат:",
@@ -96,5 +98,5 @@ async def callback_cert_select(query: CallbackQuery):
 # ===============================
 def register_subscription_handlers(dp: Dispatcher):
     dp.message.register(cmd_subscribe, Command("subscribe"))
-    dp.callback_query.register(callback_app_select, TextFilter(startswith="sub_app:"))
-    dp.callback_query.register(callback_cert_select, TextFilter(startswith="sub_cert:"))
+    dp.callback_query.register(callback_app_select, lambda c: c.data.startswith("sub_app:"))
+    dp.callback_query.register(callback_cert_select, lambda c: c.data.startswith("sub_cert:"))
