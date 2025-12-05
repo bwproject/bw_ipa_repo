@@ -12,6 +12,7 @@ from aiogram.exceptions import TelegramBadRequest
 
 from bot.handlers_packages import register_packages_handlers
 from bot.utils import extract_ipa_metadata, get_file_size
+from bot.access import check_access, add_user, ensure_users_file
 
 logger = logging.getLogger("bot.handlers")
 
@@ -24,41 +25,7 @@ IMAGES = BASE / "images"
 PACKAGES.mkdir(parents=True, exist_ok=True)
 IMAGES.mkdir(parents=True, exist_ok=True)
 
-# ==============================
-# users.json (автосоздание)
-# ==============================
-USERS_FILE = Path("users.json")
-
-if not USERS_FILE.exists():
-    USERS_FILE.write_text(json.dumps({"users": []}, indent=4), encoding="utf-8")
-
-
-def load_users() -> dict:
-    try:
-        return json.loads(USERS_FILE.read_text(encoding="utf-8"))
-    except:
-        USERS_FILE.write_text(json.dumps({"users": []}, indent=4), encoding="utf-8")
-        return {"users": []}
-
-
-def save_users(data: dict):
-    USERS_FILE.write_text(json.dumps(data, indent=4, ensure_ascii=False), encoding="utf-8")
-
-
-# ==============================
-# Проверка доступа
-# ==============================
-async def check_access(message: types.Message) -> bool:
-    admin_id = int(os.getenv("ADMIN_ID", "0"))
-    users = load_users().get("users", [])
-
-    if message.from_user.id == admin_id:
-        return True
-    if message.from_user.id in users:
-        return True
-
-    await message.answer("❌ У вас нет доступа к боту.")
-    return False
+ensure_users_file()
 
 
 # ==============================
@@ -102,7 +69,7 @@ async def fix_icon_url(meta: dict, ipa_name: str, server_url: str):
 # Обработка .ipa файлов
 # ==============================
 async def handle_document(message: types.Message, bot):
-    if not await check_access(message):
+    if not await check_access(message.from_user.id, message):
         return
 
     doc = message.document
@@ -173,7 +140,7 @@ async def handle_document(message: types.Message, bot):
 # /repo — генерация index.json
 # ==============================
 async def cmd_repo(message: types.Message):
-    if not await check_access(message):
+    if not await check_access(message.from_user.id, message):
         return
 
     server_url = os.getenv("SERVER_URL", "").rstrip("/")
@@ -246,7 +213,7 @@ async def cmd_start(message: types.Message):
 # /upload
 # ==============================
 async def cmd_upload(message: types.Message):
-    if not await check_access(message):
+    if not await check_access(message.from_user.id, message):
         return
 
     server = os.getenv("SERVER_URL", "").rstrip("/")
@@ -278,15 +245,7 @@ async def cmd_add_user(message: types.Message):
     except:
         return await message.answer("USER_ID должно быть числом.")
 
-    data = load_users()
-    users = data.get("users", [])
-
-    if user_id in users:
-        return await message.answer("⚠️ Пользователь уже добавлен.")
-
-    users.append(user_id)
-    save_users({"users": users})
-
+    add_user(user_id)
     await message.answer(f"✔ Пользователь {user_id} добавлен.")
 
 
