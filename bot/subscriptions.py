@@ -7,6 +7,9 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQu
 from aiogram.filters import Command, Text
 from bot.access import check_access
 
+# ===============================
+# Пути и сертификаты
+# ===============================
 BASE = Path("repo")
 PACKAGES = BASE / "packages"
 
@@ -17,6 +20,7 @@ CERTS = {
 }
 
 BASE_URL = os.getenv("SERVER_URL", "https://example.com")
+
 
 # ===============================
 # /subscribe — список приложений
@@ -46,8 +50,8 @@ async def callback_app_select(query: CallbackQuery):
 
     app_name = query.data.split(":", 1)[1]
 
-    # Проверяем, что приложение реально существует
-    if not (PACKAGES / f"{app_name}.ipa").exists():
+    ipa_path = PACKAGES / f"{app_name}.ipa"
+    if not ipa_path.exists():
         await query.message.edit_text("❌ Приложение больше не доступно.")
         return
 
@@ -59,7 +63,9 @@ async def callback_app_select(query: CallbackQuery):
     )
 
     await query.message.edit_text(
-        f"📲 Вы выбрали <b>{app_name}</b>\nВыберите сертификат:", parse_mode="html", reply_markup=kb
+        f"📲 Вы выбрали <b>{app_name}</b>\nВыберите сертификат:", 
+        parse_mode="html", 
+        reply_markup=kb
     )
 
 
