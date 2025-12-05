@@ -11,7 +11,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiogram.exceptions import TelegramBadRequest
 
 from bot.handlers_packages import register_packages_handlers
-from bot.subscriptions import register_subscription_handlers  # <-- новый модуль
+from bot.subscriptions import register_subscription_handlers
 from bot.utils import extract_ipa_metadata, get_file_size
 from bot.access import check_access, add_user, ensure_users_file
 
@@ -120,12 +120,11 @@ async def handle_document(message: types.Message, bot):
     except TelegramBadRequest as e:
         if "file is too big" in str(e).lower():
             upload_url = f"{server_url}/webapp"
-            kb = InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(
-                    text="📤 Загрузить через WebApp",
-                    web_app=WebAppInfo(url=upload_url)
-                )]]
-            )
+            kb = InlineKeyboardMarkup()
+            kb.add(InlineKeyboardButton(
+                text="📤 Загрузить через WebApp",
+                web_app=WebAppInfo(url=upload_url)
+            ))
 
             await message.answer("⚠️ Файл слишком большой. Используй WebApp:", reply_markup=kb)
         else:
@@ -207,8 +206,8 @@ async def cmd_start(message: types.Message):
         "• Отправь .ipa — я сохраню его в репозиторий.\n"
         "• /repo — обновить index.json\n"
         "• /upload — открыть WebApp\n"
-        "• /add_user USER_ID — дать доступ\n"
-        "• /subscribe — подписка на приложения"
+        "• /subscribe — подписка на приложения\n"
+        "• /add_user USER_ID — дать доступ"
     )
 
 
@@ -222,12 +221,11 @@ async def cmd_upload(message: types.Message):
 
     server = os.getenv("SERVER_URL", "").rstrip("/")
     upload_url = f"{server}/webapp"
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(
-            text="📤 WebApp",
-            web_app=WebAppInfo(url=upload_url)
-        )]]
-    )
+    kb = InlineKeyboardMarkup()
+    kb.add(InlineKeyboardButton(
+        text="📤 WebApp",
+        web_app=WebAppInfo(url=upload_url)
+    ))
     await message.answer("Открыть WebApp:", reply_markup=kb)
 
 
@@ -257,18 +255,16 @@ async def cmd_add_user(message: types.Message):
 # Регистрация хэндлеров
 # ==============================
 def register_handlers(dp: Dispatcher):
-    # Основные команды
     dp.message.register(cmd_start, Command(commands=["start"]))
     dp.message.register(cmd_repo, Command(commands=["repo"]))
     dp.message.register(cmd_upload, Command(commands=["upload"]))
     dp.message.register(cmd_add_user, Command(commands=["add_user"]))
 
-    # Приём .ipa файлов
     dp.message.register(
         handle_document,
         lambda m: m.document is not None and m.document.file_name.lower().endswith(".ipa")
     )
 
-    # Подключение модулей
+    # Подключаем модули пакетов и подписок
     register_packages_handlers(dp)
-    register_subscription_handlers(dp)  # <-- регистрация /subscribe
+    register_subscription_handlers(dp)
