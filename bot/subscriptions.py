@@ -4,12 +4,9 @@ import os
 from pathlib import Path
 from aiogram import types, Dispatcher
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from aiogram.filters import Command, Text
+from aiogram.filters import Command
 from bot.access import check_access
 
-# ===============================
-# Пути и сертификаты
-# ===============================
 BASE = Path("repo")
 PACKAGES = BASE / "packages"
 
@@ -50,8 +47,7 @@ async def callback_app_select(query: CallbackQuery):
 
     app_name = query.data.split(":", 1)[1]
 
-    ipa_path = PACKAGES / f"{app_name}.ipa"
-    if not ipa_path.exists():
+    if not (PACKAGES / f"{app_name}.ipa").exists():
         await query.message.edit_text("❌ Приложение больше не доступно.")
         return
 
@@ -63,8 +59,8 @@ async def callback_app_select(query: CallbackQuery):
     )
 
     await query.message.edit_text(
-        f"📲 Вы выбрали <b>{app_name}</b>\nВыберите сертификат:", 
-        parse_mode="html", 
+        f"📲 Вы выбрали <b>{app_name}</b>\nВыберите сертификат:",
+        parse_mode="html",
         reply_markup=kb
     )
 
@@ -99,5 +95,5 @@ async def callback_cert_select(query: CallbackQuery):
 # ===============================
 def register_subscription_handlers(dp: Dispatcher):
     dp.message.register(cmd_subscribe, Command("subscribe"))
-    dp.callback_query.register(callback_app_select, Text(startswith="sub_app:"))
-    dp.callback_query.register(callback_cert_select, Text(startswith="sub_cert:"))
+    dp.callback_query.register(callback_app_select, lambda q: q.data.startswith("sub_app:"))
+    dp.callback_query.register(callback_cert_select, lambda q: q.data.startswith("sub_cert:"))
