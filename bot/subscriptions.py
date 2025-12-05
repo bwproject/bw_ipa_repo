@@ -4,9 +4,12 @@ import os
 from pathlib import Path
 from aiogram import types, Dispatcher
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from aiogram.filters import Command
+from aiogram.filters import Command, Text
 from bot.access import check_access
 
+# ==============================
+# Директории и файлы
+# ==============================
 BASE = Path("repo")
 PACKAGES = BASE / "packages"
 
@@ -18,10 +21,9 @@ CERTS = {
 
 BASE_URL = os.getenv("SERVER_URL", "https://example.com")
 
-
-# ===============================
+# ==============================
 # /subscribe — список приложений
-# ===============================
+# ==============================
 async def cmd_subscribe(message: types.Message):
     if not check_access(message.from_user.id):
         await message.answer("❌ У вас нет доступа к подпискам.")
@@ -32,26 +34,27 @@ async def cmd_subscribe(message: types.Message):
         await message.answer("❌ Нет доступных приложений.")
         return
 
-    kb = InlineKeyboardMarkup(row_width=1)
+    kb = InlineKeyboardMarkup()
     for app in apps:
         kb.add(InlineKeyboardButton(text=app, callback_data=f"sub_app:{app}"))
 
     await message.answer("📱 Выберите приложение для подписки:", reply_markup=kb)
 
 
-# ===============================
+# ==============================
 # Callback: выбрали приложение
-# ===============================
+# ==============================
 async def callback_app_select(query: CallbackQuery):
     await query.answer()
 
     app_name = query.data.split(":", 1)[1]
 
+    # Проверяем, что приложение реально существует
     if not (PACKAGES / f"{app_name}.ipa").exists():
         await query.message.edit_text("❌ Приложение больше не доступно.")
         return
 
-    kb = InlineKeyboardMarkup(row_width=1)
+    kb = InlineKeyboardMarkup()
     kb.add(
         InlineKeyboardButton("FREE", callback_data=f"sub_cert:{app_name}:free"),
         InlineKeyboardButton("IPHONE SE", callback_data=f"sub_cert:{app_name}:se"),
@@ -65,9 +68,9 @@ async def callback_app_select(query: CallbackQuery):
     )
 
 
-# ===============================
+# ==============================
 # Callback: выбрали сертификат
-# ===============================
+# ==============================
 async def callback_cert_select(query: CallbackQuery):
     await query.answer()
 
@@ -90,10 +93,10 @@ async def callback_cert_select(query: CallbackQuery):
     )
 
 
-# ===============================
+# ==============================
 # Регистрация хэндлеров
-# ===============================
+# ==============================
 def register_subscription_handlers(dp: Dispatcher):
     dp.message.register(cmd_subscribe, Command("subscribe"))
-    dp.callback_query.register(callback_app_select, lambda q: q.data.startswith("sub_app:"))
-    dp.callback_query.register(callback_cert_select, lambda q: q.data.startswith("sub_cert:"))
+    dp.callback_query.register(callback_app_select, Text(startswith="sub_app:"))
+    dp.callback_query.register(callback_cert_select, Text(startswith="sub_cert:"))
