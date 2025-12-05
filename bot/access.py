@@ -1,3 +1,5 @@
+# bot/assest.py
+
 import json
 from pathlib import Path
 
