@@ -11,7 +11,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiogram.exceptions import TelegramBadRequest
 
 from bot.handlers_packages import register_packages_handlers
-from bot.subscriptions import register_subscription_handlers  # <-- новый модуль
+from bot.subscriptions import register_subscription_handlers
 from bot.utils import extract_ipa_metadata, get_file_size
 from bot.access import check_access, add_user, ensure_users_file
 
