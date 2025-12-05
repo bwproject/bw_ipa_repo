@@ -4,7 +4,9 @@ import os
 from pathlib import Path
 from aiogram import types, Dispatcher
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from aiogram.filters import Command, Text as TextFilter
+from aiogram.filters import Command
+from aiogram.filters import Text as TextFilter  # исправлено
+
 from bot.access import check_access
 
 BASE = Path("repo")
@@ -50,7 +52,7 @@ async def callback_app_select(query: CallbackQuery):
         await query.message.edit_text("❌ Приложение больше не доступно.")
         return
 
-    kb = InlineKeyboardMarkup()
+    kb = InlineKeyboardMarkup(row_width=1)
     kb.add(
         InlineKeyboardButton("FREE", callback_data=f"sub_cert:{app_name}:free"),
         InlineKeyboardButton("IPHONE SE", callback_data=f"sub_cert:{app_name}:se"),
