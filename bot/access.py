@@ -1,4 +1,4 @@
-# bot/assest.py
+# bot/access.py
 
 import json
 from pathlib import Path
