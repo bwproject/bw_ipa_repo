@@ -11,9 +11,9 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiogram.exceptions import TelegramBadRequest
 
 from bot.handlers_packages import register_packages_handlers
+from bot.subscriptions import register_subscription_handlers  # <-- новый модуль
 from bot.utils import extract_ipa_metadata, get_file_size
 from bot.access import check_access, add_user, ensure_users_file
-from bot.subscriptions import register_subscription_handlers  # модуль подписок
 
 logger = logging.getLogger("bot.handlers")
 
@@ -27,7 +27,6 @@ PACKAGES.mkdir(parents=True, exist_ok=True)
 IMAGES.mkdir(parents=True, exist_ok=True)
 
 ensure_users_file()
-
 
 # ==============================
 # Telegram File Downloader
@@ -264,14 +263,12 @@ def register_handlers(dp: Dispatcher):
     dp.message.register(cmd_upload, Command(commands=["upload"]))
     dp.message.register(cmd_add_user, Command(commands=["add_user"]))
 
-    # Загрузка .ipa
+    # Приём .ipa файлов
     dp.message.register(
         handle_document,
         lambda m: m.document is not None and m.document.file_name.lower().endswith(".ipa")
     )
 
-    # Пакеты
+    # Подключение модулей
     register_packages_handlers(dp)
-
-    # Подписки
-    register_subscription_handlers(dp)
+    register_subscription_handlers(dp)  # <-- регистрация /subscribe
