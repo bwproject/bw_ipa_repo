@@ -13,6 +13,7 @@ from aiogram.exceptions import TelegramBadRequest
 from bot.handlers_packages import register_packages_handlers
 from bot.utils import extract_ipa_metadata, get_file_size
 from bot.access import check_access, add_user, ensure_users_file
+from bot.subscriptions import register_subscription_handlers
 
 logger = logging.getLogger("bot.handlers")
 
@@ -266,3 +267,4 @@ def register_handlers(dp: Dispatcher):
     )
 
     register_packages_handlers(dp)
+    register_subscription_handlers(dp)
