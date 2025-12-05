@@ -27,7 +27,6 @@ IMAGES.mkdir(parents=True, exist_ok=True)
 
 ensure_users_file()
 
-
 # ==============================
 # Telegram File Downloader
 # ==============================
@@ -69,7 +68,8 @@ async def fix_icon_url(meta: dict, ipa_name: str, server_url: str):
 # Обработка .ipa файлов
 # ==============================
 async def handle_document(message: types.Message, bot):
-    if not await check_access(message.from_user.id, message):
+    if not check_access(message.from_user.id):
+        await message.answer("❌ У вас нет доступа к боту.")
         return
 
     doc = message.document
@@ -140,7 +140,8 @@ async def handle_document(message: types.Message, bot):
 # /repo — генерация index.json
 # ==============================
 async def cmd_repo(message: types.Message):
-    if not await check_access(message.from_user.id, message):
+    if not check_access(message.from_user.id):
+        await message.answer("❌ У вас нет доступа к боту.")
         return
 
     server_url = os.getenv("SERVER_URL", "").rstrip("/")
@@ -213,7 +214,8 @@ async def cmd_start(message: types.Message):
 # /upload
 # ==============================
 async def cmd_upload(message: types.Message):
-    if not await check_access(message.from_user.id, message):
+    if not check_access(message.from_user.id):
+        await message.answer("❌ У вас нет доступа к боту.")
         return
 
     server = os.getenv("SERVER_URL", "").rstrip("/")
@@ -253,7 +255,6 @@ async def cmd_add_user(message: types.Message):
 # Регистрация хэндлеров
 # ==============================
 def register_handlers(dp: Dispatcher):
-
     dp.message.register(cmd_start, Command(commands=["start"]))
     dp.message.register(cmd_repo, Command(commands=["repo"]))
     dp.message.register(cmd_upload, Command(commands=["upload"]))
