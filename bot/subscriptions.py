@@ -10,12 +10,18 @@ from bot.access import check_access
 BASE = Path("repo")
 PACKAGES = BASE / "packages"
 
-# Сертификаты
-CERTS = {
-    "free": os.getenv("CERT_FREE", "free_cert.mobileprovision"),
-    "se": os.getenv("CERT_SE", "se_cert.mobileprovision"),
-    "pro": os.getenv("CERT_PRO", "pro_cert.mobileprovision"),
+# ===============================
+# Папки сертификатов
+# ===============================
+CERT_DIR = Path("sert")
+CERT_DIRS = {
+    "free": CERT_DIR / "free",
+    "se": CERT_DIR / "iphonese",
+    "pro": CERT_DIR / "iphone13promax",
 }
+# Создаём папки при старте бота
+for p in CERT_DIRS.values():
+    p.mkdir(parents=True, exist_ok=True)
 
 BASE_URL = os.getenv("SERVER_URL", "https://example.com")
 
@@ -48,7 +54,6 @@ async def callback_app_select(query: CallbackQuery):
 
     app_name = query.data.split(":", 1)[1]
 
-    # Проверяем, что приложение реально существует
     if not (PACKAGES / f"{app_name}.ipa").exists():
         await query.message.edit_text("❌ Приложение больше не доступно.")
         return
@@ -80,12 +85,13 @@ async def callback_cert_select(query: CallbackQuery):
         await query.message.edit_text("❌ Приложение больше не доступно.")
         return
 
-    cert_file = CERTS.get(cert_type)
-    if not cert_file:
+    cert_path = CERT_DIRS.get(cert_type)
+    if not cert_path:
         await query.message.edit_text("❌ Некорректный сертификат.")
         return
 
-    install_url = f"{BASE_URL}/install/{app_name}.ipa?cert={cert_file}"
+    # Формируем ссылку на установку, передавая путь сертификата
+    install_url = f"{BASE_URL}/install/{app_name}.ipa?cert={cert_path.name}"
 
     await query.message.edit_text(
         f"✔ Ссылка для установки <b>{app_name}</b> с сертификатом <b>{cert_type.upper()}</b>:\n{install_url}",
