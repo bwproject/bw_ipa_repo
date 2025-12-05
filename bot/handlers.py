@@ -45,7 +45,6 @@ async def _download_via_telegram_url(bot, file_id: str, dest: Path):
                 async for chunk in resp.content.iter_chunked(64 * 1024):
                     fd.write(chunk)
 
-
 # ==============================
 # ICON URL FIX
 # ==============================
@@ -63,7 +62,6 @@ async def fix_icon_url(meta: dict, ipa_name: str, server_url: str):
         return f"{server_url}{icon_url}"
 
     return ""
-
 
 # ==============================
 # Обработка .ipa файлов
@@ -120,11 +118,12 @@ async def handle_document(message: types.Message, bot):
     except TelegramBadRequest as e:
         if "file is too big" in str(e).lower():
             upload_url = f"{server_url}/webapp"
-            kb = InlineKeyboardMarkup()
-            kb.add(InlineKeyboardButton(
-                text="📤 Загрузить через WebApp",
-                web_app=WebAppInfo(url=upload_url)
-            ))
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(
+                    text="📤 Загрузить через WebApp",
+                    web_app=WebAppInfo(url=upload_url)
+                )]
+            ])
 
             await message.answer("⚠️ Файл слишком большой. Используй WebApp:", reply_markup=kb)
         else:
@@ -134,7 +133,6 @@ async def handle_document(message: types.Message, bot):
     except Exception as e:
         logger.exception(e)
         await message.answer("❌ Ошибка при скачивании файла")
-
 
 # ==============================
 # /repo — генерация index.json
@@ -160,7 +158,6 @@ async def cmd_repo(message: types.Message):
 
     for ipa in PACKAGES.glob("*.ipa"):
         meta_file = ipa.with_suffix(".json")
-
         if meta_file.exists():
             try:
                 app_meta = json.loads(meta_file.read_text(encoding="utf-8"))
@@ -189,13 +186,11 @@ async def cmd_repo(message: types.Message):
                     }
                 ]
             }
-
         app_meta["iconURL"] = await fix_icon_url(app_meta, ipa.name, server_url)
         repo_data["apps"].append(app_meta)
 
     index_file.write_text(json.dumps(repo_data, indent=4, ensure_ascii=False), encoding="utf-8")
     await message.answer(f"✔ index.json обновлён: {server_url}/repo/index.json")
-
 
 # ==============================
 # /start
@@ -210,7 +205,6 @@ async def cmd_start(message: types.Message):
         "• /add_user USER_ID — дать доступ"
     )
 
-
 # ==============================
 # /upload
 # ==============================
@@ -221,13 +215,13 @@ async def cmd_upload(message: types.Message):
 
     server = os.getenv("SERVER_URL", "").rstrip("/")
     upload_url = f"{server}/webapp"
-    kb = InlineKeyboardMarkup()
-    kb.add(InlineKeyboardButton(
-        text="📤 WebApp",
-        web_app=WebAppInfo(url=upload_url)
-    ))
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="📤 WebApp",
+            web_app=WebAppInfo(url=upload_url)
+        )]
+    ])
     await message.answer("Открыть WebApp:", reply_markup=kb)
-
 
 # ==============================
 # /add_user — добавить пользователя
@@ -249,7 +243,6 @@ async def cmd_add_user(message: types.Message):
 
     add_user(user_id)
     await message.answer(f"✔ Пользователь {user_id} добавлен.")
-
 
 # ==============================
 # Регистрация хэндлеров
