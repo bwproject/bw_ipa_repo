@@ -25,7 +25,8 @@ class EditStates(StatesGroup):
 
 # /packages_update
 async def cmd_packages_update(message: types.Message):
-    if not await check_access(message.from_user.id, message):
+    if not check_access(message.from_user.id):
+        await message.answer("❌ У вас нет доступа к боту.")
         return
 
     count = len(list(PACKAGES.glob("*.json")))
@@ -34,7 +35,8 @@ async def cmd_packages_update(message: types.Message):
 
 # /packages_list
 async def cmd_packages_list(message: types.Message):
-    if not await check_access(message.from_user.id, message):
+    if not check_access(message.from_user.id):
+        await message.answer("❌ У вас нет доступа к боту.")
         return
 
     files = list(PACKAGES.glob("*.json"))
@@ -51,7 +53,8 @@ async def cmd_packages_list(message: types.Message):
 
 # /packages_edit NAME
 async def cmd_packages_edit_name(message: types.Message, state: FSMContext):
-    if not await check_access(message.from_user.id, message):
+    if not check_access(message.from_user.id):
+        await message.answer("❌ У вас нет доступа к боту.")
         return
 
     parts = message.text.split(maxsplit=1)
@@ -77,7 +80,8 @@ async def cmd_packages_edit_name(message: types.Message, state: FSMContext):
 
 # FSM обработчик
 async def process_edit_line(message: types.Message, state: FSMContext):
-    if not await check_access(message.from_user.id, message):
+    if not check_access(message.from_user.id):
+        await message.answer("❌ У вас нет доступа к боту.")
         return
 
     data = await state.get_data()
