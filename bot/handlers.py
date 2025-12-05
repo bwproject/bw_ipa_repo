@@ -13,7 +13,7 @@ from aiogram.exceptions import TelegramBadRequest
 from bot.handlers_packages import register_packages_handlers
 from bot.utils import extract_ipa_metadata, get_file_size
 from bot.access import check_access, add_user, ensure_users_file
-from bot.subscriptions import register_subscription_handlers
+from bot.subscriptions import register_subscription_handlers  # модуль подписок
 
 logger = logging.getLogger("bot.handlers")
 
@@ -27,6 +27,7 @@ PACKAGES.mkdir(parents=True, exist_ok=True)
 IMAGES.mkdir(parents=True, exist_ok=True)
 
 ensure_users_file()
+
 
 # ==============================
 # Telegram File Downloader
@@ -207,7 +208,8 @@ async def cmd_start(message: types.Message):
         "• Отправь .ipa — я сохраню его в репозиторий.\n"
         "• /repo — обновить index.json\n"
         "• /upload — открыть WebApp\n"
-        "• /add_user USER_ID — дать доступ"
+        "• /add_user USER_ID — дать доступ\n"
+        "• /subscribe — подписка на приложения"
     )
 
 
@@ -256,15 +258,20 @@ async def cmd_add_user(message: types.Message):
 # Регистрация хэндлеров
 # ==============================
 def register_handlers(dp: Dispatcher):
+    # Основные команды
     dp.message.register(cmd_start, Command(commands=["start"]))
     dp.message.register(cmd_repo, Command(commands=["repo"]))
     dp.message.register(cmd_upload, Command(commands=["upload"]))
     dp.message.register(cmd_add_user, Command(commands=["add_user"]))
 
+    # Загрузка .ipa
     dp.message.register(
         handle_document,
         lambda m: m.document is not None and m.document.file_name.lower().endswith(".ipa")
     )
 
+    # Пакеты
     register_packages_handlers(dp)
+
+    # Подписки
     register_subscription_handlers(dp)
