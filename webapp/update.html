@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Редактирование приложения</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #0d0d1a;
+            color: #fff;
+            padding: 20px;
+        }
+        .container {
+            max-width: 500px;
+            margin: auto;
+            background: rgba(255,255,255,0.05);
+            padding: 20px;
+            border-radius: 10px;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 5px;
+            border: none;
+            background: rgba(255,255,255,0.15);
+            color: #fff;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #4c8bf5;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #3a6cd6;
+        }
+    </style>
+</head>
+
+<body>
+<div class="container">
+    <h2>Редактировать приложение</h2>
+
+    <div id="status"></div>
+
+    <label>Название</label>
+    <input id="name">
+
+    <label>Описание</label>
+    <textarea id="desc" rows="4"></textarea>
+
+    <label>Bundle ID</label>
+    <input id="bundle">
+
+    <label>Версия</label>
+    <input id="version">
+
+    <button onclick="save()">Сохранить</button>
+</div>
+
+<script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const app = urlParams.get("app");
+    const tgid = urlParams.get("tgid");
+
+    if (!app || !tgid) {
+        document.body.innerHTML = "<h3>Ошибка: отсутствуют параметры</h3>";
+    }
+
+    async function load() {
+        const res = await fetch(`/api/app/get?app=${app}&tgid=${tgid}`);
+        const data = await res.json();
+
+        if (!data.ok) {
+            document.getElementById("status").innerHTML =
+                "<b style='color:red'>" + data.error + "</b>";
+            return;
+        }
+
+        document.getElementById("name").value = data.name;
+        document.getElementById("desc").value = data.description;
+        document.getElementById("bundle").value = data.bundle;
+        document.getElementById("version").value = data.version;
+    }
+
+    async function save() {
+        const body = {
+            app: app,
+            tgid: tgid,
+            name: document.getElementById("name").value,
+            description: document.getElementById("desc").value,
+            bundle: document.getElementById("bundle").value,
+            version: document.getElementById("version").value
+        };
+
+        const res = await fetch(`/api/app/update`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(body)
+        });
+
+        const data = await res.json();
+
+        if (data.ok) {
+            document.getElementById("status").innerHTML =
+                "<b style='color:#7CFC00'>Сохранено!</b>";
+        } else {
+            document.getElementById("status").innerHTML =
+                "<b style='color:red'>" + data.error + "</b>";
+        }
+    }
+
+    load();
+</script>
+
+</body>
+</html>
