@@ -1,5 +1,3 @@
-# bot/handlers.py
-
 import json
 import logging
 import os
@@ -94,7 +92,7 @@ async def handle_document(message: types.Message, bot):
                 "bundleIdentifier": meta.get("bundleIdentifier") or f"com.projectbw.{target.stem.lower()}",
                 "developerName": meta.get("developerName", "Unknown"),
                 "iconURL": fixed_icon,
-                "localizedDescription": meta.get("localizedDescription") or "",
+                "localizedDescription": meta.get("localizedDescription") or "Описание недоступно.",
                 "subtitle": meta.get("subtitle") or "",
                 "tintColor": meta.get("tintColor") or "3c94fc",
                 "category": meta.get("category") or "utilities",
@@ -103,8 +101,8 @@ async def handle_document(message: types.Message, bot):
                         "downloadURL": f"{server_url}/repo/packages/{target.name}",
                         "size": get_file_size(target),
                         "version": meta.get("version") or "1.0",
-                        "buildVersion": "1",
-                        "date": "",
+                        "buildVersion": meta.get("build") or "1",
+                        "date": meta.get("date") or "",
                         "localizedDescription": meta.get("localizedDescription") or "",
                         "minOSVersion": meta.get("min_ios") or "16.0"
                     }
@@ -134,6 +132,55 @@ async def handle_document(message: types.Message, bot):
         logger.exception(e)
         await message.answer("❌ Ошибка при скачивании файла")
 
+# ====================================================
+# NEW: /fixmeta — пересоздать .json у всех IPA
+# ====================================================
+async def cmd_fixmeta(message: types.Message):
+    if not check_access(message.from_user.id):
+        return await message.answer("❌ У вас нет доступа.")
+
+    server_url = os.getenv("SERVER_URL", "").rstrip("/")
+    created = 0
+    report = ""
+
+    for ipa in PACKAGES.glob("*.ipa"):
+        meta_file = ipa.with_suffix(".json")
+        if meta_file.exists():
+            continue
+
+        meta = extract_ipa_metadata(ipa)
+
+        meta_info = {
+            "name": meta.get("name") or ipa.stem,
+            "bundleIdentifier": meta.get("bundleIdentifier") or f"com.projectbw.{ipa.stem.lower()}",
+            "developerName": meta.get("developerName") or "Unknown",
+            "iconURL": "",
+            "localizedDescription": meta.get("localizedDescription") or "Описание недоступно.",
+            "subtitle": "",
+            "tintColor": "3c94fc",
+            "category": "utilities",
+            "versions": [
+                {
+                    "downloadURL": f"{server_url}/repo/packages/{ipa.name}",
+                    "size": get_file_size(ipa),
+                    "version": meta.get("version") or "1.0",
+                    "buildVersion": meta.get("build") or "1",
+                    "date": meta.get("date") or "",
+                    "localizedDescription": meta.get("localizedDescription") or "",
+                    "minOSVersion": meta.get("min_ios") or "16.0"
+                }
+            ]
+        }
+
+        meta_file.write_text(json.dumps(meta_info, indent=4, ensure_ascii=False), encoding="utf-8")
+        created += 1
+        report += f"✔ Создан meta: {ipa.stem}.json\n"
+
+    if created == 0:
+        await message.answer("✔ Все .json уже существуют.")
+    else:
+        await message.answer(report + f"\nВсего создано: {created}")
+
 # ==============================
 # /repo — генерация index.json
 # ==============================
@@ -156,41 +203,68 @@ async def cmd_repo(message: types.Message):
         "apps": []
     }
 
+    updated_count = 0
+    updated_names = []
+
     for ipa in PACKAGES.glob("*.ipa"):
+        updated_count += 1
+        updated_names.append(ipa.stem)
+
         meta_file = ipa.with_suffix(".json")
         if meta_file.exists():
             try:
                 app_meta = json.loads(meta_file.read_text(encoding="utf-8"))
             except:
-                continue
+                app_meta = {}
         else:
             meta = extract_ipa_metadata(ipa)
-            app_meta = {
-                "name": ipa.stem,
-                "bundleIdentifier": f"com.projectbw.{ipa.stem.lower()}",
-                "developerName": "Unknown",
-                "iconURL": "",
-                "localizedDescription": "",
-                "subtitle": "",
-                "tintColor": "3c94fc",
-                "category": "utilities",
-                "versions": [
-                    {
-                        "downloadURL": f"{server_url}/repo/packages/{ipa.name}",
-                        "size": get_file_size(ipa),
-                        "version": "1.0",
-                        "buildVersion": "1",
-                        "date": "",
-                        "localizedDescription": "",
-                        "minOSVersion": "16.0"
-                    }
-                ]
-            }
+            app_meta = {}
+
+        # гарантируем поля
+        app_meta.setdefault("name", ipa.stem)
+        app_meta.setdefault("bundleIdentifier", f"com.projectbw.{ipa.stem.lower()}")
+        app_meta.setdefault("developerName", "Unknown")
+        app_meta.setdefault("subtitle", "")
+        app_meta.setdefault("tintColor", "3c94fc")
+        app_meta.setdefault("category", "utilities")
+        app_meta.setdefault("localizedDescription", "Описание недоступно.")
+
+        # иконка
         app_meta["iconURL"] = await fix_icon_url(app_meta, ipa.name, server_url)
+
+        # версии
+        if "versions" not in app_meta or not app_meta["versions"]:
+            meta = extract_ipa_metadata(ipa)
+            app_meta["versions"] = [
+                {
+                    "downloadURL": f"{server_url}/repo/packages/{ipa.name}",
+                    "size": get_file_size(ipa),
+                    "version": meta.get("version") or "1.0",
+                    "buildVersion": meta.get("build") or "1",
+                    "date": meta.get("date") or "",
+                    "localizedDescription": app_meta.get("localizedDescription", ""),
+                    "minOSVersion": meta.get("min_ios") or "16.0"
+                }
+            ]
+        else:
+            app_meta["versions"][0]["downloadURL"] = f"{server_url}/repo/packages/{ipa.name}"
+            app_meta["versions"][0]["size"] = get_file_size(ipa)
+
         repo_data["apps"].append(app_meta)
 
+    # сортировка по имени
+    repo_data["apps"].sort(key=lambda x: x["name"].lower())
+
     index_file.write_text(json.dumps(repo_data, indent=4, ensure_ascii=False), encoding="utf-8")
-    await message.answer(f"✔ index.json обновлён: {server_url}/repo/index.json")
+
+    apps_list = "\n".join([f"— {n}" for n in sorted(updated_names)])
+
+    await message.answer(
+        f"✔ index.json обновлён\n"
+        f"📦 Всего приложений: <b>{updated_count}</b>\n\n"
+        f"{apps_list}",
+        parse_mode="html"
+    )
 
 # ==============================
 # /start
@@ -200,6 +274,7 @@ async def cmd_start(message: types.Message):
         "👋 bw_ipa_repo bot\n\n"
         "• Отправь .ipa — я сохраню его в репозиторий.\n"
         "• /repo — обновить index.json\n"
+        "• /fixmeta — пересоздать .json для IPA\n"
         "• /upload — открыть WebApp\n"
         "• /subscribe — подписка на приложения\n"
         "• /add_user USER_ID — дать доступ"
@@ -250,6 +325,7 @@ async def cmd_add_user(message: types.Message):
 def register_handlers(dp: Dispatcher):
     dp.message.register(cmd_start, Command(commands=["start"]))
     dp.message.register(cmd_repo, Command(commands=["repo"]))
+    dp.message.register(cmd_fixmeta, Command(commands=["fixmeta"]))
     dp.message.register(cmd_upload, Command(commands=["upload"]))
     dp.message.register(cmd_add_user, Command(commands=["add_user"]))
 
@@ -258,6 +334,5 @@ def register_handlers(dp: Dispatcher):
         lambda m: m.document is not None and m.document.file_name.lower().endswith(".ipa")
     )
 
-    # Подключаем модули пакетов и подписок
     register_packages_handlers(dp)
     register_subscription_handlers(dp)
