@@ -5,14 +5,11 @@
 import asyncio
 import os
 import logging
-import json
-from pathlib import Path
 from dotenv import load_dotenv
-
+from pathlib import Path
 from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
 
 load_dotenv()
 
@@ -23,105 +20,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger("bw_ipa_repo")
 
-# ==============================
-# Папки
-# ==============================
-BASE = Path("repo")
+# ======== Paths ========
+BASE = Path("repo")          # локальная папка repo
 PACKAGES = BASE / "packages"
 IMAGES = BASE / "images"
-INDEX_HTML = Path("webapp/update.html")  # Статический HTML для редактирования
+INDEX_HTML = Path("index/template.html")  # Статический HTML шаблон
 
 BASE.mkdir(parents=True, exist_ok=True)
 PACKAGES.mkdir(parents=True, exist_ok=True)
 IMAGES.mkdir(parents=True, exist_ok=True)
 
-# ==============================
-# FastAPI
-# ==============================
+# ======== FastAPI app ========
 app = FastAPI(title="bw_ipa_repo")
 
-# ==============================
-# API: получить приложение
-# ==============================
-@app.get("/api/app/get")
-async def api_get_app(app: str, tgid: int):
-    users_file = BASE / "users.json"
-    if users_file.exists():
-        users = json.loads(users_file.read_text(encoding="utf-8"))
-    else:
-        users = []
-
-    if tgid not in users:
-        return {"ok": False, "error": "Нет доступа"}
-
-    json_file = PACKAGES / f"{app}.json"
-    if not json_file.exists():
-        return {"ok": False, "error": "Приложение не найдено"}
-
-    data = json.loads(json_file.read_text(encoding="utf-8"))
-
-    return {
-        "ok": True,
-        "name": data.get("name", ""),
-        "description": data.get("localizedDescription", ""),
-        "bundle": data.get("bundleIdentifier", ""),
-        "version": data.get("versions", [{}])[0].get("version", "1.0")
-    }
-
-# ==============================
-# Модель для обновления
-# ==============================
-class AppUpdate(BaseModel):
-    app: str
-    tgid: int
-    name: str
-    description: str
-    bundle: str
-    version: str
-
-# ==============================
-# API: обновить приложение
-# ==============================
-@app.post("/api/app/update")
-async def api_update_app(data: AppUpdate):
-    users_file = BASE / "users.json"
-    if users_file.exists():
-        users = json.loads(users_file.read_text(encoding="utf-8"))
-    else:
-        users = []
-
-    if data.tgid not in users:
-        return {"ok": False, "error": "Нет доступа"}
-
-    json_file = PACKAGES / f"{data.app}.json"
-    if not json_file.exists():
-        return {"ok": False, "error": "Приложение не найдено"}
-
-    app_data = json.loads(json_file.read_text(encoding="utf-8"))
-
-    app_data["name"] = data.name
-    app_data["localizedDescription"] = data.description
-    app_data["bundleIdentifier"] = data.bundle
-    if "versions" not in app_data or not app_data["versions"]:
-        app_data["versions"] = [{}]
-    app_data["versions"][0]["version"] = data.version
-
-    json_file.write_text(json.dumps(app_data, indent=4, ensure_ascii=False), encoding="utf-8")
-
-    return {"ok": True}
-
-# ==============================
-# Корень / — отдаём update.html или альтернативный файл
-# ==============================
+# ======== Корневой маршрут / ========
 @app.get("/", response_class=FileResponse)
 async def root_index():
     if INDEX_HTML.exists():
         return FileResponse(INDEX_HTML)
     return FileResponse("index_not_found.html")  # альтернативный файл с сообщением
 
-# ==============================
-# Раздача index.json
-# ==============================
+# ======== API: получить index.json ========
 @app.get("/repo/index.json")
 async def get_index():
     p = BASE / "index.json"
@@ -129,11 +48,9 @@ async def get_index():
         logger.info("Serving index.json")
         return FileResponse(p)
     logger.warning("index.json not found")
-    return {"error": "index.json not found"}, 404
+    return JSONResponse({"error": "index.json not found"}, status_code=404)
 
-# ==============================
-# Раздача IPA
-# ==============================
+# ======== API: получение IPA файлов ========
 @app.get("/repo/packages/{file_name}")
 async def get_package(file_name: str):
     p = PACKAGES / file_name
@@ -141,11 +58,9 @@ async def get_package(file_name: str):
         logger.info(f"Serving package {file_name}")
         return FileResponse(p)
     logger.warning(f"Package not found: {file_name}")
-    return {"error": "file not found"}, 404
+    return JSONResponse({"error": "file not found"}, status_code=404)
 
-# ==============================
-# Раздача изображений
-# ==============================
+# ======== API: получение картинок ========
 @app.get("/repo/images/{file_name}")
 async def get_image(file_name: str):
     p = IMAGES / file_name
@@ -153,11 +68,9 @@ async def get_image(file_name: str):
         logger.info(f"Serving image {file_name}")
         return FileResponse(p)
     logger.warning(f"Image not found: {file_name}")
-    return {"error": "file not found"}, 404
+    return JSONResponse({"error": "file not found"}, status_code=404)
 
-# ==============================
-# Загрузка IPA через API
-# ==============================
+# ======== Загрузка IPA через FastAPI ========
 @app.post("/upload")
 async def upload_ipa(file: UploadFile = File(...)):
     filename = file.filename
@@ -167,16 +80,13 @@ async def upload_ipa(file: UploadFile = File(...)):
         while chunk := await file.read(1024 * 1024):
             f.write(chunk)
 
+    logger.info(f"Uploaded {filename}")
     return {"status": "ok", "saved": filename}
 
-# ==============================
-# Статика для WebApp
-# ==============================
+# ======== Статика /webapp ========
 app.mount("/webapp", StaticFiles(directory="webapp", html=True), name="webapp")
 
-# ==============================
-# Запуск Telegram бота + FastAPI
-# ==============================
+# ======== Запуск Telegram бота и FastAPI ========
 from bot.bot import start_bot  # локальный импорт, чтобы избежать circular import
 
 async def start_services():
