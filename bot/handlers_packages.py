@@ -2,12 +2,15 @@
 
 import json
 import logging
+import os
 from pathlib import Path
 
 from aiogram import types, Dispatcher
 from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
+
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from bot.access import check_access
 
@@ -23,7 +26,9 @@ class EditStates(StatesGroup):
     editing_version = State()
 
 
+# ==============================
 # /packages_update
+# ==============================
 async def cmd_packages_update(message: types.Message):
     if not check_access(message.from_user.id):
         await message.answer("❌ У вас нет доступа к боту.")
@@ -33,7 +38,9 @@ async def cmd_packages_update(message: types.Message):
     await message.answer(f"♻ Найдено JSON файлов: <b>{count}</b>", parse_mode="html")
 
 
+# ==============================
 # /packages_list
+# ==============================
 async def cmd_packages_list(message: types.Message):
     if not check_access(message.from_user.id):
         await message.answer("❌ У вас нет доступа к боту.")
@@ -43,15 +50,30 @@ async def cmd_packages_list(message: types.Message):
     if not files:
         return await message.answer("❌ Нет .json файлов")
 
-    msg = "📦 JSON файлы:\n\n"
+    server_url = os.getenv("SERVER_URL", "").rstrip("/")
+    tgid = message.from_user.id
+
+    text = "📦 Приложения в репозитории:\n\n"
+    keyboards = []
+
     for f in files:
-        msg += f"• <b>{f.stem}</b>\n"
+        app = f.stem
+        text += f"• <b>{app}</b>\n"
 
-    msg += "\nДля редактирования: <code>/packages_edit имя</code>"
-    await message.answer(msg, parse_mode="html")
+        edit_url = f"{server_url}/webapp/update.html?app={app}&tgid={tgid}"
+
+        keyboards.append([
+            InlineKeyboardButton(text=f"✏️ Редактировать {app}", url=edit_url)
+        ])
+
+    kb = InlineKeyboardMarkup(inline_keyboard=keyboards)
+
+    await message.answer(text, reply_markup=kb, parse_mode="html")
 
 
-# /packages_edit NAME
+# ==============================
+# /packages_edit NAME — консольный режим
+# ==============================
 async def cmd_packages_edit_name(message: types.Message, state: FSMContext):
     if not check_access(message.from_user.id):
         await message.answer("❌ У вас нет доступа к боту.")
@@ -78,7 +100,9 @@ async def cmd_packages_edit_name(message: types.Message, state: FSMContext):
     )
 
 
+# ==============================
 # FSM обработчик
+# ==============================
 async def process_edit_line(message: types.Message, state: FSMContext):
     if not check_access(message.from_user.id):
         await message.answer("❌ У вас нет доступа к боту.")
@@ -120,6 +144,9 @@ async def process_edit_line(message: types.Message, state: FSMContext):
     await message.answer(prompt, parse_mode="html")
 
 
+# ==============================
+# Регистрация хендлеров
+# ==============================
 def register_packages_handlers(dp: Dispatcher):
     dp.message.register(cmd_packages_update, Command("packages_update"))
     dp.message.register(cmd_packages_list, Command("packages_list"))
