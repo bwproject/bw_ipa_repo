@@ -10,7 +10,7 @@ from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
 from bot.access import check_access
 
@@ -63,7 +63,10 @@ async def cmd_packages_list(message: types.Message):
         edit_url = f"{server_url}/webapp/update.html?app={app}&tgid={tgid}"
 
         keyboards.append([
-            InlineKeyboardButton(text=f"✏️ Редактировать {app}", url=edit_url)
+            InlineKeyboardButton(
+                text=f"✏️ Редактировать {app}",
+                web_app=WebAppInfo(url=edit_url)   # ← ТЕПЕРЬ ЭТО WEBAPP
+            )
         ])
 
     kb = InlineKeyboardMarkup(inline_keyboard=keyboards)
