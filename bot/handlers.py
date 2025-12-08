@@ -260,9 +260,11 @@ async def cmd_repo(message: types.Message):
     index_file.write_text(json.dumps(repo_data, indent=4, ensure_ascii=False), encoding="utf-8")
 
     apps_list = "\n".join([f"— {n}" for n in sorted(updated_names)])
+    repo_url = f"{server_url}/repo/index.json"
 
     await message.answer(
         f"✔ index.json обновлён\n"
+        f" {repo_url} \n\n"
         f"📦 Всего приложений: <b>{updated_count}</b>\n\n"
         f"{apps_list}",
         parse_mode="html"
